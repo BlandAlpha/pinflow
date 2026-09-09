@@ -68,6 +68,14 @@ export function registerIpcHandlers(): void {
     broadcastDataChanged()
     return todo
   })
+  ipcMain.handle(
+    IPC.TODOS_SET_POSITION,
+    (_e, id: string, x: number, y: number): Todo => {
+      const todo = db.setBoardPosition(id, x, y)
+      broadcastDataChanged()
+      return todo
+    }
+  )
   ipcMain.handle(IPC.TODOS_REORDER, (_e, orderedIds: string[]): Todo[] => {
     const todos = db.reorderTodos(orderedIds)
     broadcastDataChanged()

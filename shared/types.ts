@@ -35,6 +35,13 @@ export interface Todo {
   /** 列表内排序（越小越靠前） */
   order: number
   steps: Step[]
+  /**
+   * 白板坐标（0..1 归一化，null = 尚未放到白板上）。
+   * x：0 = 最紧急（左），1 = 最不紧急（右）
+   * y：0 = 最重要（上），1 = 最不重要（下）
+   */
+  boardX: number | null
+  boardY: number | null
 }
 
 /** 创建任务入参：只需要标题 */
@@ -48,6 +55,8 @@ export interface CreateTodoInput {
   tags?: string[]
   pinned?: boolean
   classified?: boolean
+  boardX?: number | null
+  boardY?: number | null
 }
 
 /** 更新任务入参（只传需要改的字段） */
@@ -74,7 +83,7 @@ export interface QuadrantValue {
 }
 
 /** 主窗口视图 */
-export type ViewKey = 'inbox' | 'today' | 'kanban' | 'all'
+export type ViewKey = 'inbox' | 'today' | 'board' | 'all'
 
 /** 全部筛选条件（All 视图） */
 export interface TodoFilter {

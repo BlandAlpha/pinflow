@@ -16,6 +16,7 @@ export const IPC = {
   TODOS_DELETE: 'todos:delete',
   TODOS_TOGGLE: 'todos:toggle',
   TODOS_SET_QUADRANT: 'todos:setQuadrant',
+  TODOS_SET_POSITION: 'todos:setPosition',
   TODOS_REORDER: 'todos:reorder',
   TODOS_ADD_TAG: 'todos:addTag',
   TODOS_REMOVE_TAG: 'todos:removeTag',
@@ -59,6 +60,7 @@ export interface TodoApi {
   deleteTodo(id: string): Promise<boolean>
   toggleTodo(id: string): Promise<Todo>
   setQuadrant(id: string, quadrant: Quadrant): Promise<Todo>
+  setPosition(id: string, x: number, y: number): Promise<Todo>
   reorderTodos(orderedIds: string[]): Promise<Todo[]>
   addTag(id: string, tag: string): Promise<Todo>
   removeTag(id: string, tag: string): Promise<Todo>

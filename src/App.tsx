@@ -8,7 +8,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { UndoBar } from '@/components/layout/UndoBar'
 import { InboxView } from '@/components/views/InboxView'
 import { TodayView } from '@/components/views/TodayView'
-import { KanbanBoard } from '@/components/views/KanbanBoard'
+import { Whiteboard } from '@/components/views/Whiteboard'
 import { AllView } from '@/components/views/AllView'
 import { DetailPanel } from '@/components/detail/DetailPanel'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -101,7 +101,7 @@ function Workspace() {
         <main className="relative flex min-w-0 flex-1 flex-col">
           {view === 'inbox' && <InboxView />}
           {view === 'today' && <TodayView />}
-          {view === 'kanban' && <KanbanBoard />}
+          {view === 'board' && <Whiteboard />}
           {view === 'all' && <AllView />}
           <UndoBar />
         </main>

@@ -10,9 +10,10 @@ import type {
   UpdateTodoInput
 } from '@shared/types'
 import { quadrantToLevels } from '@shared/quadrant'
+import { positionForQuadrant, levelsAt } from '@shared/board'
 
 /** 当前 schema 版本，递增时追加迁移步骤 */
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 interface TodoRow {
   id: string
@@ -29,6 +30,8 @@ interface TodoRow {
   pinned: number
   classified: number
   sort_order: number
+  board_x: number | null
+  board_y: number | null
 }
 
 interface StepRow {
@@ -114,7 +117,56 @@ function migrate(d: Database.Database): void {
       ) WHERE sort_order = 0;
     `)
   }
+  if (current < 3) {
+    // v3：白板坐标（连续的重要性 × 紧急性空间）
+    const cols = d.prepare('PRAGMA table_info(todos)').all() as { name: string }[]
+    if (!cols.some((c) => c.name === 'board_x')) {
+      d.exec('ALTER TABLE todos ADD COLUMN board_x REAL')
+    }
+    if (!cols.some((c) => c.name === 'board_y')) {
+      d.exec('ALTER TABLE todos ADD COLUMN board_y REAL')
+    }
+    // 回填：已有分类的任务按象限落到对应区域，并按 id 做稳定抖动避免完全重叠
+    const rows = d
+      .prepare(
+        `SELECT id, importance, urgency, classified FROM todos WHERE board_x IS NULL OR board_y IS NULL`
+      )
+      .all() as { id: string; importance: string; urgency: string; classified: number }[]
+    const upd = d.prepare('UPDATE todos SET board_x = ?, board_y = ? WHERE id = ?')
+    const tx = d.transaction((list: typeof rows) => {
+      list.forEach((r, i) => {
+        const q = levelToQuadrant(toLevel(r.importance), toLevel(r.urgency))
+        const base = positionForQuadrant(q)
+        const jitter = (hash01(r.id, i) - 0.5) * 0.18
+        const jitter2 = (hash01(r.id, i + 977) - 0.5) * 0.18
+        upd.run(
+          Math.min(0.97, Math.max(0.03, base.x + jitter)),
+          Math.min(0.97, Math.max(0.03, base.y + jitter2)),
+          r.id
+        )
+      })
+    })
+    tx(rows)
+  }
   d.pragma(`user_version = ${SCHEMA_VERSION}`)
+}
+
+function levelToQuadrant(importance: Level, urgency: Level): 1 | 2 | 3 | 4 {
+  const important = importance === 'high'
+  const urgent = urgency === 'high'
+  if (important && urgent) return 1
+  if (important && !urgent) return 2
+  if (!important && urgent) return 3
+  return 4
+}
+
+function hash01(seed: string, salt: number): number {
+  let h = 2166136261 ^ salt
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return ((h >>> 0) % 10000) / 10000
 }
 
 /* ------------------------------ 映射 ------------------------------ */
@@ -152,6 +204,8 @@ function mapTodo(row: TodoRow, steps: Step[]): Todo {
     pinned: row.pinned === 1,
     classified: row.classified === 1,
     order: row.sort_order ?? 0,
+    boardX: row.board_x ?? null,
+    boardY: row.board_y ?? null,
     steps
   }
 }
@@ -247,6 +301,8 @@ export function updateTodo(input: UpdateTodoInput): Todo {
   if (input.dueAt !== undefined) push('due_at', input.dueAt)
   if (input.tags !== undefined) push('tags', JSON.stringify(input.tags))
   if (input.pinned !== undefined) push('pinned', input.pinned ? 1 : 0)
+  if (input.boardX !== undefined) push('board_x', input.boardX)
+  if (input.boardY !== undefined) push('board_y', input.boardY)
   // 任何一次明确的属性编辑（象限/截止/置顶/标签）都视为「已分类」，任务随之离开收件箱
   const impliesClassified =
     input.importance !== undefined ||
@@ -282,7 +338,16 @@ export function toggleTodo(id: string): Todo {
 
 export function setQuadrant(id: string, quadrant: Quadrant): Todo {
   const { importance, urgency } = quadrantToLevels(quadrant)
-  return updateTodo({ id, importance, urgency, classified: true })
+  const p = positionForQuadrant(quadrant)
+  return updateTodo({ id, importance, urgency, classified: true, boardX: p.x, boardY: p.y })
+}
+
+/** 白板拖拽：写入坐标，并按坐标推导内部重要度/紧急度 */
+export function setBoardPosition(id: string, x: number, y: number): Todo {
+  const cx = Math.min(1, Math.max(0, x))
+  const cy = Math.min(1, Math.max(0, y))
+  const levels = levelsAt({ x: cx, y: cy })
+  return updateTodo({ id, boardX: cx, boardY: cy, ...levels, classified: true })
 }
 
 /** 在同一象限内重排：orderedIds 为期望顺序 */

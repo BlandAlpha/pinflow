@@ -11,6 +11,7 @@ export default {
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         surface: 'hsl(var(--surface))',
+        'surface-2': 'hsl(var(--surface-2))',
         foreground: 'hsl(var(--foreground))',
         primary: {
           DEFAULT: 'hsl(var(--primary))',

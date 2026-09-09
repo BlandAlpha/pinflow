@@ -119,30 +119,48 @@ function paint(size) {
   return buf
 }
 
-function makeIco(pngBuf) {
+/**
+ * 组装 .ico：包含 Windows 常用的全部尺寸，任务栏 / 资源管理器才能拿到清晰的图标。
+ * 每个条目都是 PNG 压缩（Windows Vista+ 原生支持）。
+ */
+function makeIco(entries) {
   const header = Buffer.alloc(6)
   header.writeUInt16LE(0, 0)
   header.writeUInt16LE(1, 2)
-  header.writeUInt16LE(1, 4)
-  const entry = Buffer.alloc(16)
-  entry[0] = 0 // 256
-  entry[1] = 0 // 256
-  entry[2] = 0
-  entry[3] = 0
-  entry.writeUInt16LE(1, 4)
-  entry.writeUInt16LE(32, 6)
-  entry.writeUInt32LE(pngBuf.length, 8)
-  entry.writeUInt32LE(22, 12)
-  return Buffer.concat([header, entry, pngBuf])
+  header.writeUInt16LE(entries.length, 4)
+
+  const dirSize = 6 + entries.length * 16
+  let offset = dirSize
+  const dir = []
+  for (const { size, png } of entries) {
+    const e = Buffer.alloc(16)
+    e[0] = size >= 256 ? 0 : size
+    e[1] = size >= 256 ? 0 : size
+    e[2] = 0
+    e[3] = 0
+    e.writeUInt16LE(1, 4)
+    e.writeUInt16LE(32, 6)
+    e.writeUInt32LE(png.length, 8)
+    e.writeUInt32LE(offset, 12)
+    offset += png.length
+    dir.push(e)
+  }
+  return Buffer.concat([header, ...dir, ...entries.map((e) => e.png)])
 }
 
 mkdirSync(OUT_DIR, { recursive: true })
 
+const ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
+
 const icon256 = encodePng(256, 256, paint(256))
 const tray64 = encodePng(64, 64, paint(64))
+const icoEntries = ICO_SIZES.map((size) => ({
+  size,
+  png: size === 256 ? icon256 : encodePng(size, size, paint(size))
+}))
 
 writeFileSync(join(OUT_DIR, 'icon.png'), icon256)
-writeFileSync(join(OUT_DIR, 'icon.ico'), makeIco(icon256))
+writeFileSync(join(OUT_DIR, 'icon.ico'), makeIco(icoEntries))
 writeFileSync(join(OUT_DIR, 'tray.png'), tray64)
 
 console.log('icons written to', OUT_DIR)

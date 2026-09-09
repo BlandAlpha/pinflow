@@ -21,6 +21,8 @@ function todo(patch: Partial<Todo> = {}): Todo {
     classified: false,
     order: 0,
     steps: [],
+    boardX: null,
+    boardY: null,
     ...patch
   }
 }

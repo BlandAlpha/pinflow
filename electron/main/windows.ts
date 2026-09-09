@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { BrowserWindow, app, screen } from 'electron'
+import { BrowserWindow, app, nativeImage, screen } from 'electron'
 import { resolvedTheme } from './prefs'
 import { appState } from './state'
 
@@ -37,6 +37,15 @@ function writeState(patch: WindowStateFile): void {
   } catch {
     /* 状态持久化失败不影响使用 */
   }
+}
+
+/** 应用图标：窗口标题栏与任务栏都用它，取代 Electron 默认图标 */
+function appIcon(): Electron.NativeImage | undefined {
+  const file = app.isPackaged
+    ? join(process.resourcesPath, 'resources', 'icon.png')
+    : join(__dirname, '../../resources/icon.png')
+  const image = nativeImage.createFromPath(file)
+  return image.isEmpty() ? undefined : image
 }
 
 export function getMainWindow(): BrowserWindow | null {
@@ -104,6 +113,7 @@ export function createCaptureWindow(): BrowserWindow {
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
+    icon: appIcon(),
     backgroundColor: resolvedTheme() === 'dark' ? '#121316' : '#fafafa',
     show: false,
     webPreferences: {

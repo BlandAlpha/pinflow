@@ -13,3 +13,4 @@ coverage
 *.tsbuildinfo
 
 .native-cache
+release-v4

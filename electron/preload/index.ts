@@ -13,6 +13,7 @@ const api: TodoApi & { themeSnapshot: typeof themeSnapshot } = {
   deleteTodo: (id) => ipcRenderer.invoke(IPC.TODOS_DELETE, id),
   toggleTodo: (id) => ipcRenderer.invoke(IPC.TODOS_TOGGLE, id),
   setQuadrant: (id, q) => ipcRenderer.invoke(IPC.TODOS_SET_QUADRANT, id, q),
+  setPosition: (id, x, y) => ipcRenderer.invoke(IPC.TODOS_SET_POSITION, id, x, y),
   reorderTodos: (ids) => ipcRenderer.invoke(IPC.TODOS_REORDER, ids),
   addTag: (id, tag) => ipcRenderer.invoke(IPC.TODOS_ADD_TAG, id, tag),
   removeTag: (id, tag) => ipcRenderer.invoke(IPC.TODOS_REMOVE_TAG, id, tag),

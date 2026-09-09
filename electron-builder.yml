@@ -25,8 +25,9 @@ extraResources:
 
 win:
   icon: resources/icon.ico
-  # 个人本地应用不做代码签名：关闭签名/改写 exe 资源，
-  # 可避免打包时下载并解压 winCodeSign（在受限账户下解压可能因符号链接权限失败）
+  # 个人本地应用不做代码签名：关闭 rcedit，可避免打包时联网下载 winCodeSign
+  #（本机缓存版本与 electron-builder 期望的不一致，且 GitHub 下载被拦截）。
+  # 应用图标在运行时由 BrowserWindow.icon 设置，任务栏/窗口图标已正确显示。
   signAndEditExecutable: false
   target:
     - target: nsis

@@ -8,7 +8,7 @@ import { dueTone, formatDue } from '@/lib/date'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { QuadrantPicker } from '@/components/task/QuadrantPicker'
+import { PriorityChip } from '@/components/task/PriorityChip'
 import { DueBadge, DuePicker } from '@/components/task/DuePicker'
 import { InlineSteps } from '@/components/task/InlineSteps'
 
@@ -40,7 +40,6 @@ export const TaskCard = memo(function TaskCard({
 }: TaskCardProps) {
   const toggle = useTodos((s) => s.toggle)
   const togglePin = useTodos((s) => s.togglePin)
-  const setQuadrant = useTodos((s) => s.setQuadrant)
   const update = useTodos((s) => s.update)
   const [stepsOpen, setStepsOpen] = useState(false)
 
@@ -86,7 +85,7 @@ export const TaskCard = memo(function TaskCard({
           )}
           <span
             className={cn(
-              'min-w-0 flex-1 text-[13px] leading-5',
+              'min-w-0 flex-1 text-[13.5px] font-medium leading-5',
               variant === 'board' ? 'line-clamp-2' : 'truncate',
               completed && 'text-muted-foreground line-through'
             )}
@@ -97,22 +96,7 @@ export const TaskCard = memo(function TaskCard({
 
         {/* 次要信息：安静、只在有内容时出现 */}
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <QuadrantPicker
-            value={todo.classified ? q : null}
-            onChange={(next) => void setQuadrant(todo.id, next)}
-          >
-            <button
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 rounded px-1 py-px text-2xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title={todo.classified ? `${meta.title} · 点击更换` : '未分类 · 点击选择象限'}
-            >
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ background: todo.classified ? meta.dotVar : 'hsl(var(--border-strong))' }}
-              />
-              {todo.classified ? meta.action : '未分类'}
-            </button>
-          </QuadrantPicker>
+          <PriorityChip todo={todo} />
 
           {todo.dueAt && (
             <DuePicker value={todo.dueAt} onChange={(iso) => void update({ id: todo.id, dueAt: iso })}>

@@ -104,8 +104,8 @@ export function computeVisible(
       const active = todos.filter((t) => t.status === 'active')
       return sortByPriority(active, now)
     }
-    case 'kanban':
-      // 看板自行拆分为「四象限 + 未分类暂存区」
+    case 'board':
+      // 白板自行按坐标铺开（未落点的任务自动排布）
       return todos
         .filter((t) => t.status === 'active')
         .slice()

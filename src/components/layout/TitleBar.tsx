@@ -1,11 +1,12 @@
-import { CheckSquare, Minus, Square, X } from 'lucide-react'
+import { Minus, Square, X } from 'lucide-react'
 import { useTodos } from '@/store/todos'
 import { Button } from '@/components/ui/button'
+import { AppIcon } from '@/components/layout/AppIcon'
 
 const VIEW_TITLES: Record<string, string> = {
   inbox: '收件箱',
   today: '今天',
-  kanban: '看板',
+  board: '白板',
   all: '全部任务'
 }
 
@@ -14,11 +15,9 @@ export function TitleBar() {
 
   return (
     <header className="app-drag flex h-9 shrink-0 select-none items-center gap-2 border-b border-border bg-surface-2/60 px-3">
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        <CheckSquare className="h-3.5 w-3.5" />
-        <span className="text-2xs font-medium tracking-wide">Todo Tracker</span>
-      </div>
-      <span className="text-2xs text-muted-foreground/70">/ {VIEW_TITLES[view]}</span>
+      <AppIcon className="h-[15px] w-[15px]" />
+      <span className="text-2xs font-medium tracking-wide text-foreground/70">Todo Tracker</span>
+      <span className="text-2xs text-muted-foreground/60">/ {VIEW_TITLES[view]}</span>
 
       <div className="flex-1" />
 

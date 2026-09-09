@@ -8,21 +8,21 @@
 ## 设计原则
 
 1. **Capture first** —— 创建任务只需要一个标题，其余全部可选。
-2. **System organizes** —— 任务进入收件箱后，由象限、截止时间、置顶等信号自动推导优先级与归属。
+2. **System organizes** —— 任务进入收件箱后，由白板位置、截止时间、置顶等信号自动推导优先级与归属。
 3. **User corrects if needed** —— 你只需要纠正系统的判断（拖一下、点一下），而不是先填一堆字段。
-4. **四象限（看板 Kanban）是唯一面向用户的分类** —— 重要度/紧急度由象限自动推导，界面上不暴露独立控件（仅藏在详情「更多」里）。
+4. **白板坐标是唯一面向用户的分类** —— 一块连续的「重要性 × 紧急性」二维空间：上=重要、下=不重要、左=紧急、右=不紧急。重要度/紧急度由坐标自动推导，界面上不暴露重复的独立控件。
 5. **渐进式披露** —— 常用操作一步可达，高级信息默认折叠。
 
 ## 四个视图
 
 | 视图 | 回答的问题 | 形态 |
 | --- | --- | --- |
-| **收件箱 Inbox** | 还有什么没归位？ | 分诊台：卡片直接操作（点标题改名、点圆点改象限、点日期改截止、点进度展开步骤） |
-| **今天 Today** | 现在该做什么？ | 分三档：现在 / 接下来 / 稍后（按优先级评分阈值 45 / 28 自动划分） |
-| **看板 Kanban** | 这件事值不值得做？ | 真 2×2 看板，四象限同屏 + 未分类暂存区，拖拽跨象限改分类、象限内插入重排 |
+| **收件箱 Inbox** | 还有什么没归位？ | 分诊台：卡片直接操作（点标题改名、点优先级徽标调 2D 选择器、点日期改截止、点进度展开步骤） |
+| **今天 Today** | 现在该做什么？ | 卡片分区：现在做 / 接下来 / 稍后（按优先级评分阈值 45 / 28 自动划分），大字号标题 + 安静元信息 |
+| **白板 Board** | 这件事值不值得做？ | 自由二维画布：任务是便签，可拖到任意位置并即时持久化；中轴/四角有弱提示，未落点的任务自动避让排布 |
 | **全部 All** | 找某个具体任务 | 更密集的工具化列表：搜索 / 状态 / 截止 / 排序筛选 |
 
-- 未分类任务（`classified = false`）只出现在收件箱；一旦设定象限/截止/置顶/标签，即视为已分类并移出收件箱。
+- 未落点任务（`board_x / board_y` 为空）只出现在收件箱；一旦拖动到白板或设定截止/置顶/标签，即视为已归类。
 - 所有拖拽与勾选即时持久化，无确认弹窗。
 
 ## 主题
@@ -88,7 +88,7 @@ Schema 版本由 `user_version` 管理，启动时增量迁移（v2 新增 `clas
 | `↑` / `↓` | 在任务列表中移动选择 |
 | `Space` | 完成 / 取消完成选中任务 |
 | `Enter` / `E` | 打开选中任务详情 |
-| `1` – `4` | 将选中任务移到对应象限（看板） |
+| `1` – `4` | 将选中任务移到对应象限的中心（白板） |
 | `Delete` | 归档选中任务（可撤销） |
 | `Shift + Delete` | 彻底删除选中任务（可撤销） |
 | `Esc` | 关闭详情 / 清除选择 |
@@ -104,7 +104,7 @@ Schema 版本由 `user_version` 管理，启动时增量迁移（v2 新增 `clas
 ```
 
 分数只用于排序与 Today 分档，不主导界面呈现。已完成/已归档任务统一沉底。
-单元测试见 `tests/priority.test.ts`（评分与权重）与 `tests/model.test.ts`（象限映射、收件箱归属、Today 分档）。
+单元测试见 `tests/priority.test.ts`（评分与权重）、`tests/model.test.ts`（象限映射、收件箱归属、Today 分档）与 `tests/board.test.ts`（白板坐标系、自动排布与避让）。
 
 ## 基本架构
 
@@ -113,7 +113,8 @@ shared/               类型与纯逻辑（渲染/主进程共用，不依赖 El
   types.ts            任务/步骤/筛选等数据模型
   ipc.ts              IPC 通道名与 API 签名（preload 桥接的契约）
   priority.ts         优先级评分（含单元测试）
-  quadrant.ts         四象限 <-> 重要/紧急 映射 + 象限文案/配色元数据
+  board.ts            白板坐标系：位置 <-> 象限/等级、象限中心、自动排布与重叠避让
+  quadrant.ts         象限文案/配色元数据（仅用于命名与兼容）
 electron/main/        主进程
   index.ts            应用生命周期、全局快捷键、单实例、冒烟测试
   windows.ts          主窗口（无边框）与快速捕获小窗、窗口状态持久化
@@ -125,10 +126,10 @@ electron/preload/     contextBridge 暴露 window.api / window.capture
   theme.ts            首帧主题快照（避免闪烁）+ 主题变更广播
 src/                  渲染进程 (React)
   store/todos.ts      Zustand 全局状态（列表、选中、筛选、撤销）
-  lib/visible.ts      各视图列表计算（收件箱/今天/看板/全部）
+  lib/visible.ts      各视图列表计算（收件箱/今天/白板/全部）
   components/
     task/             TaskCard（统一卡片语言）、QuadrantPicker、DuePicker、InlineSteps
-    views/            InboxView / TodayView / KanbanBoard / AllView
+    views/            InboxView / TodayView / Whiteboard / AllView
     detail/           DetailPanel（渐进披露属性行 + 步骤 + 备注 + 更多）
     layout/           Sidebar / TitleBar
     theme/            ThemeProvider / ThemeToggle

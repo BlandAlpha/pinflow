@@ -5,5 +5,9 @@
 - SQLite 二进制不能本地编译（无 MSVC）：始终用 `node scripts/fetch-native.mjs` 下载预编译版；打包配置 `npmRebuild: false`、`win.signAndEditExecutable: false`。
 - 打包用镜像：ELECTRON_MIRROR / ELECTRON_BUILDER_BINARIES_MIRROR（npmmirror）。
 - 数据库：`%APPDATA%/todo-tracker/todo.db`；冒烟测试数据在 `.../smoke` 子目录（`npm run smoke`，`--skip-capture` 可跳过捕获窗阶段）。
-- 本沙箱限制：GUI 程序须后台启动；需 `env -u ELECTRON_RUN_AS_NODE`；同一进程第二个 BrowserWindow 创建会被环境阻塞（真实桌面无此问题）。
-- 遗留清理项：旧 `release/` 目录 223MB（文件被锁无法删除），可手动删除；`release2/` 仅剩空壳。
+- 本沙箱限制：GUI 程序须后台启动；需 `env -u ELECTRON_RUN_AS_NODE`；同一进程第二个 BrowserWindow 创建会被环境阻塞（真实桌面无此问题）；冒烟跑完进程不会自退，循环跑多轮时要加 `timeout` 并在轮次间结束 electron 进程。
+- 设计约定（第三轮重构后）：白板二维坐标（`board_x/board_y`，上=重要/左=紧急）是唯一用户可见分类；未落点=收件箱；象限只作命名/兼容；优先级选择器统一为 2D 方型 picker（详情内联、卡片徽标弹窗），不再暴露独立的象限/重要度/紧急度控件。
+- 设计约定：所有颜色走语义 CSS 变量，禁止在组件里硬编码颜色；默认 System 主题并持久化；主题切换只用图标（跟随系统=日月组合图标），标签仅 浅色/深色/跟随系统。
+- 侧栏三档响应式：>=1240 完整 / >=1040 紧凑(图标+计数) / <1040 仅图标(悬停浮层展开)；底部只放主题切换+设置，开机启动/数据库位置/快捷键收进设置弹窗。
+- 验证手段：`node scripts/png-brightness.mjs .smoke/*.png` 判断截图明暗与是否空白（模型无法直接看图时用它替代）。
+- 遗留清理项：旧 `release/` 目录 223MB（app.asar 被占用无法删除，打包时改用 `-c.directories.output=release-v2`）；`release2/` 为空壳。

@@ -131,7 +131,7 @@ async function runSmokeTest(): Promise<void> {
     for (const [index, name] of [
       [0, 'inbox'],
       [1, 'today'],
-      [2, 'kanban'],
+      [2, 'board'],
       [3, 'all']
     ] as const) {
       if (wanted && !wanted.includes(name)) continue
@@ -140,7 +140,7 @@ async function runSmokeTest(): Promise<void> {
       await shot(name)
     }
 
-    // 打开详情面板
+    // 打开详情面板（含 2D 优先级选择器）
     if (!wanted || wanted.includes('detail')) {
       await nav(0)
       await sleep(400)
@@ -151,6 +151,27 @@ async function runSmokeTest(): Promise<void> {
       )
       await sleep(700)
       await shot('detail')
+    }
+
+    // 侧栏三档响应式状态（完整 / 紧凑 / 仅图标）
+    if (!wanted || wanted.includes('sidebar')) {
+      await nav(0)
+      await sleep(300)
+      const original = main.getSize()
+      for (const [w, h, name] of [
+        [1440, 900, 'sidebar-full'],
+        [1120, 860, 'sidebar-compact'],
+        [960, 820, 'sidebar-icon']
+      ] as const) {
+        if (main.isMaximized()) main.unmaximize()
+        main.setSize(w, h)
+        main.center()
+        await sleep(500)
+        await shot(name)
+      }
+      main.setSize(original[0], original[1])
+      main.center()
+      await sleep(300)
     }
 
     const shortcutOk = globalShortcut.isRegistered(CAPTURE_SHORTCUT)
