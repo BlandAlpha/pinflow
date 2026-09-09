@@ -5,13 +5,16 @@ export function isImportant(level: Level): boolean {
   return level === 'high'
 }
 
-/** 象限编号 -> importance / urgency */
+/**
+ * 象限 -> 内部重要度/紧急度。
+ * 面向用户的分类只有「象限」，这两个值由象限自动推导，用于优先级评分。
+ */
 export function quadrantToLevels(q: Quadrant): QuadrantValue {
   const important = q === 1 || q === 2
   const urgent = q === 1 || q === 3
   return {
-    importance: important ? 'high' : 'normal',
-    urgency: urgent ? 'high' : 'normal'
+    importance: important ? 'high' : 'low',
+    urgency: urgent ? 'high' : 'low'
   }
 }
 
@@ -29,33 +32,46 @@ export function quadrantOf(todo: Pick<Todo, 'importance' | 'urgency'>): Quadrant
   return levelsToQuadrant(todo.importance, todo.urgency)
 }
 
-export const QUADRANT_META: Record<
-  Quadrant,
-  { title: string; subtitle: string; hint: string; cssVar: string }
-> = {
+export interface QuadrantMeta {
+  title: string
+  /** 语义副标题 */
+  action: string
+  /** 简短说明 */
+  hint: string
+  /** 极淡的表面色调变量 */
+  tintVar: string
+  /** 强调点颜色变量（低饱和） */
+  dotVar: string
+}
+
+export const QUADRANT_META: Record<Quadrant, QuadrantMeta> = {
   1: {
     title: '重要且紧急',
-    subtitle: '马上做',
+    action: '现在就做',
     hint: '立即处理',
-    cssVar: 'var(--q1)'
+    tintVar: 'var(--q1-tint)',
+    dotVar: 'var(--q1)'
   },
   2: {
     title: '重要不紧急',
-    subtitle: '计划做',
-    hint: '排期进行',
-    cssVar: 'var(--q2)'
+    action: '计划安排',
+    hint: '排期推进',
+    tintVar: 'var(--q2-tint)',
+    dotVar: 'var(--q2)'
   },
   3: {
     title: '不重要但紧急',
-    subtitle: '委托/快速做',
-    hint: '快速清掉',
-    cssVar: 'var(--q3)'
+    action: '快速清掉',
+    hint: '尽快处理或委托',
+    tintVar: 'var(--q3-tint)',
+    dotVar: 'var(--q3)'
   },
   4: {
     title: '不重要不紧急',
-    subtitle: '少做或删除',
-    hint: '考虑删除',
-    cssVar: 'var(--q4)'
+    action: '以后再说',
+    hint: '有空再做或删掉',
+    tintVar: 'var(--q4-tint)',
+    dotVar: 'var(--q4)'
   }
 }
 

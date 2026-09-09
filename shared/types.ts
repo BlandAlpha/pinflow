@@ -18,6 +18,7 @@ export interface Todo {
   id: string
   title: string
   notes: string
+  /** 内部评分用；用户面向的分类是「象限」，象限自动推导这两个值 */
   importance: Level
   urgency: Level
   /** ISO 字符串，未设置时为 null */
@@ -29,10 +30,14 @@ export interface Todo {
   tags: string[]
   /** 手动置顶 */
   pinned: boolean
+  /** 是否已明确分类（false = 未分类，留在收件箱） */
+  classified: boolean
+  /** 列表内排序（越小越靠前） */
+  order: number
   steps: Step[]
 }
 
-/** 创建任务入参 */
+/** 创建任务入参：只需要标题 */
 export interface CreateTodoInput {
   title: string
   notes?: string
@@ -42,6 +47,7 @@ export interface CreateTodoInput {
   status?: TodoStatus
   tags?: string[]
   pinned?: boolean
+  classified?: boolean
 }
 
 /** 更新任务入参（只传需要改的字段） */
@@ -49,6 +55,14 @@ export interface UpdateTodoInput extends Partial<CreateTodoInput> {
   id: string
   completedAt?: string | null
   archived?: never
+}
+
+/** 主题模式 */
+export type ThemeMode = 'light' | 'dark' | 'system'
+
+/** 本地偏好设置（存于 userData/prefs.json，跨窗口共享） */
+export interface AppPrefs {
+  theme: ThemeMode
 }
 
 /** 四象限编号：1 重要紧急 / 2 重要不紧急 / 3 不重要紧急 / 4 不重要不紧急 */

@@ -42,6 +42,8 @@ interface TodosStore {
   remove: (id: string) => Promise<void>
   setLevel: (id: string, key: 'importance' | 'urgency', value: Level) => Promise<void>
   setQuadrant: (id: string, q: Quadrant) => Promise<void>
+  /** 重新排序（看板拖拽用） */
+  reorder: (orderedIds: string[]) => Promise<void>
   togglePin: (id: string) => Promise<void>
   addTag: (id: string, tag: string) => Promise<void>
   removeTag: (id: string, tag: string) => Promise<void>
@@ -160,6 +162,11 @@ export const useTodos = create<TodosStore>((set, get) => ({
   setQuadrant: async (id, q) => {
     await api().setQuadrant(id, q)
     await get().refresh()
+  },
+
+  reorder: async (orderedIds) => {
+    const todos = await api().reorderTodos(orderedIds)
+    set({ todos })
   },
 
   togglePin: async (id) => {

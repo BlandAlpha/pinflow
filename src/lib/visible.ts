@@ -1,14 +1,37 @@
 import type { Todo, TodoFilter, ViewKey } from '@shared/types'
-import { sortByPriority } from '@shared/priority'
+import { priorityScore, sortByPriority } from '@shared/priority'
 
 /**
- * 任务是否"未分类"：重要度/紧急度均为默认值、且没有截止日期。
- * 满足该条件的任务保留在 Inbox。
+ * 任务是否"未分类"：用户没有主动给它象限/截止/置顶/标签。
+ * 未分类任务保留在 Inbox —— 捕获优先，系统代为组织。
  */
 export function isInboxTask(todo: Todo): boolean {
-  return (
-    todo.importance === 'normal' && todo.urgency === 'normal' && !todo.dueAt
+  return !todo.classified
+}
+
+/** Today 分档阈值（基于优先级分数，确定性） */
+export const TODAY_BANDS = { now: 45, next: 28 } as const
+
+export interface TodayBands {
+  now: Todo[]
+  next: Todo[]
+  later: Todo[]
+}
+
+/** 把今日队列分成 现在 / 接下来 / 稍后 三档 */
+export function groupToday(todos: Todo[], now = new Date()): TodayBands {
+  const active = sortByPriority(
+    todos.filter((t) => t.status === 'active'),
+    now
   )
+  const bands: TodayBands = { now: [], next: [], later: [] }
+  for (const t of active) {
+    const score = priorityScore(t, now)
+    if (t.pinned || score >= TODAY_BANDS.now) bands.now.push(t)
+    else if (score >= TODAY_BANDS.next) bands.next.push(t)
+    else bands.later.push(t)
+  }
+  return bands
 }
 
 function matchesFilter(todo: Todo, f: TodoFilter): boolean {
@@ -31,10 +54,9 @@ function matchesFilter(todo: Todo, f: TodoFilter): boolean {
       return false
     } else {
       const due = new Date(todo.dueAt).getTime()
-      const now = new Date()
-      const endOfToday = new Date(now)
+      const endOfToday = new Date()
       endOfToday.setHours(23, 59, 59, 999)
-      if (f.dueRange === 'overdue' && !(due < now.getTime() && todo.status === 'active')) return false
+      if (f.dueRange === 'overdue' && !(due < Date.now() && todo.status === 'active')) return false
       if (f.dueRange === 'today' && due > endOfToday.getTime()) return false
       if (f.dueRange === 'week') {
         const week = endOfToday.getTime() + 6 * 24 * 3600 * 1000
@@ -66,16 +88,28 @@ function sortAll(list: Todo[], sort: TodoFilter['sort']): Todo[] {
 }
 
 /** 根据视图与筛选条件计算当前应展示的任务列表 */
-export function computeVisible(todos: Todo[], view: ViewKey, filter: TodoFilter, now = new Date()): Todo[] {
+export function computeVisible(
+  todos: Todo[],
+  view: ViewKey,
+  filter: TodoFilter,
+  now = new Date()
+): Todo[] {
   switch (view) {
     case 'inbox':
-      return todos.filter((t) => t.status === 'active' && isInboxTask(t)).reverse()
+      return todos
+        .filter((t) => t.status === 'active' && isInboxTask(t))
+        .slice()
+        .sort((a, b) => a.order - b.order || b.createdAt.localeCompare(a.createdAt))
     case 'today': {
       const active = todos.filter((t) => t.status === 'active')
       return sortByPriority(active, now)
     }
     case 'matrix':
-      return todos.filter((t) => t.status === 'active')
+      // 看板自行拆分为「四象限 + 未分类暂存区」
+      return todos
+        .filter((t) => t.status === 'active')
+        .slice()
+        .sort((a, b) => a.order - b.order || b.createdAt.localeCompare(a.createdAt))
     case 'all':
     default: {
       const matched = todos.filter((t) => matchesFilter(t, filter))

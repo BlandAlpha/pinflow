@@ -12,7 +12,7 @@ import type {
 import { quadrantToLevels } from '@shared/quadrant'
 
 /** 当前 schema 版本，递增时追加迁移步骤 */
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 interface TodoRow {
   id: string
@@ -27,6 +27,8 @@ interface TodoRow {
   completed_at: string | null
   tags: string
   pinned: number
+  classified: number
+  sort_order: number
 }
 
 interface StepRow {
@@ -87,6 +89,31 @@ function migrate(d: Database.Database): void {
       CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
     `)
   }
+  if (current < 2) {
+    // v2：显式分类标记 + 列表内手动排序（渐进式分类：默认未分类，留在收件箱）
+    const cols = d.prepare('PRAGMA table_info(todos)').all() as { name: string }[]
+    if (!cols.some((c) => c.name === 'classified')) {
+      d.exec('ALTER TABLE todos ADD COLUMN classified INTEGER NOT NULL DEFAULT 0')
+    }
+    if (!cols.some((c) => c.name === 'sort_order')) {
+      d.exec('ALTER TABLE todos ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0')
+    }
+    // 回填：已被明确设置过属性（重要度/紧急度/截止/置顶/标签）的任务视为已分类
+    d.exec(`
+      UPDATE todos SET classified = 1
+      WHERE classified = 0 AND (
+        importance <> 'normal' OR urgency <> 'normal'
+        OR due_at IS NOT NULL OR pinned = 1
+        OR (tags IS NOT NULL AND tags <> '[]')
+      );
+    `)
+    // 回填排序：按创建顺序
+    d.exec(`
+      UPDATE todos SET sort_order = (
+        SELECT COUNT(*) FROM todos t2 WHERE t2.rowid < todos.rowid
+      ) WHERE sort_order = 0;
+    `)
+  }
   d.pragma(`user_version = ${SCHEMA_VERSION}`)
 }
 
@@ -123,6 +150,8 @@ function mapTodo(row: TodoRow, steps: Step[]): Todo {
     completedAt: row.completed_at,
     tags: parseTags(row.tags),
     pinned: row.pinned === 1,
+    classified: row.classified === 1,
+    order: row.sort_order ?? 0,
     steps
   }
 }
@@ -145,7 +174,9 @@ function nowIso(): string {
 
 export function listTodos(): Todo[] {
   const d = instance()
-  const todoRows = d.prepare('SELECT * FROM todos ORDER BY created_at ASC').all() as TodoRow[]
+  const todoRows = d
+    .prepare('SELECT * FROM todos ORDER BY sort_order ASC, created_at ASC')
+    .all() as TodoRow[]
   const stepRows = d
     .prepare('SELECT * FROM steps ORDER BY sort_order ASC, rowid ASC')
     .all() as StepRow[]
@@ -175,9 +206,10 @@ export function createTodo(input: CreateTodoInput): Todo {
   const d = instance()
   const ts = nowIso()
   const id = randomUUID()
+  const min = d.prepare('SELECT COALESCE(MIN(sort_order), 0) AS m FROM todos').get() as { m: number }
   d.prepare(
-    `INSERT INTO todos (id, title, notes, importance, urgency, due_at, status, created_at, updated_at, completed_at, tags, pinned)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO todos (id, title, notes, importance, urgency, due_at, status, created_at, updated_at, completed_at, tags, pinned, classified, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.title.trim(),
@@ -190,7 +222,10 @@ export function createTodo(input: CreateTodoInput): Todo {
     ts,
     null,
     JSON.stringify(input.tags ?? []),
-    input.pinned ? 1 : 0
+    input.pinned ? 1 : 0,
+    input.classified ? 1 : 0,
+    // 新任务排在最前
+    Math.min(0, min.m) - 1
   )
   return getTodo(id)
 }
@@ -212,6 +247,15 @@ export function updateTodo(input: UpdateTodoInput): Todo {
   if (input.dueAt !== undefined) push('due_at', input.dueAt)
   if (input.tags !== undefined) push('tags', JSON.stringify(input.tags))
   if (input.pinned !== undefined) push('pinned', input.pinned ? 1 : 0)
+  // 任何一次明确的属性编辑（象限/截止/置顶/标签）都视为「已分类」，任务随之离开收件箱
+  const impliesClassified =
+    input.importance !== undefined ||
+    input.urgency !== undefined ||
+    input.dueAt !== undefined ||
+    input.pinned !== undefined ||
+    (input.tags !== undefined && input.tags.length > 0)
+  if (input.classified !== undefined) push('classified', input.classified ? 1 : 0)
+  else if (impliesClassified) push('classified', 1)
   if (input.status !== undefined) {
     push('status', input.status)
     push('completed_at', input.status === 'completed' ? (input.completedAt ?? nowIso()) : null)
@@ -238,7 +282,19 @@ export function toggleTodo(id: string): Todo {
 
 export function setQuadrant(id: string, quadrant: Quadrant): Todo {
   const { importance, urgency } = quadrantToLevels(quadrant)
-  return updateTodo({ id, importance, urgency })
+  return updateTodo({ id, importance, urgency, classified: true })
+}
+
+/** 在同一象限内重排：orderedIds 为期望顺序 */
+export function reorderTodos(orderedIds: string[]): Todo[] {
+  const d = instance()
+  const tx = d.transaction((ids: string[]) => {
+    ids.forEach((id, index) => {
+      d.prepare('UPDATE todos SET sort_order = ? WHERE id = ?').run(index, id)
+    })
+  })
+  tx(orderedIds)
+  return listTodos()
 }
 
 export function addTag(id: string, tag: string): Todo {
