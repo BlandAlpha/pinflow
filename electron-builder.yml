@@ -11,6 +11,11 @@ files:
   - out/**
   - package.json
 
+# 关闭原生模块重建：本机无 MSVC 工具链，better-sqlite3 直接使用
+# scripts/fetch-native.mjs 下载的官方预编译二进制（与 Electron ABI 匹配）
+npmRebuild: false
+buildDependenciesFromSource: false
+
 asarUnpack:
   - "**/node_modules/better-sqlite3/**"
 
@@ -20,6 +25,9 @@ extraResources:
 
 win:
   icon: resources/icon.ico
+  # 个人本地应用不做代码签名：关闭签名/改写 exe 资源，
+  # 可避免打包时下载并解压 winCodeSign（在受限账户下解压可能因符号链接权限失败）
+  signAndEditExecutable: false
   target:
     - target: nsis
       arch: [x64]

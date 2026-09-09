@@ -14,22 +14,30 @@ node scripts/fetch-native.mjs           # 下载 better-sqlite3 预编译二进�
 npm run dev            # 启动开发模式（主进程 + 渲染进程热更新）
 ```
 
-> 本机若没有 Visual Studio C++ 构建工具，不要执行 `electron-builder install-app-deps` /
-> `npm rebuild`；better-sqlite3 直接使用官方预编译产物，由 `scripts/fetch-native.mjs`
-> 按 Electron 的 ABI 自动下载匹配版本。
+> 提示：
+> - 本机若没有 Visual Studio C++ 构建工具，不要执行 `electron-builder install-app-deps`
+>   或 `npm rebuild`；better-sqlite3 直接使用官方预编译产物，由 `scripts/fetch-native.mjs`
+>   按 Electron 的 ABI（当前 electron-v130）自动下载匹配版本。
+> - 在受限/自动化终端中若启动 Electron 报 `electron.app undefined`，请清除
+>   `ELECTRON_RUN_AS_NODE` 环境变量后再运行。
+> - 打包下载缓慢或失败时使用镜像：
+>   `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
+>   `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`
 
 ```bash
 npm run typecheck      # TypeScript 类型检查
 npm run test           # 优先级评分单元测试 (vitest)
 npm run build          # 构建到 out/
-npm run dist           # 打包 Windows 安装包 (release/)
+npm run smoke          # 构建 + 自动化冒烟测试（截图输出到 .smoke/）
+npm run pack           # 打包免安装版 (release/win-unpacked/TodoTracker.exe)
+npm run dist           # 打包 Windows 安装包 (release/TodoTracker-x.y.z-setup.exe)
 ```
 
 ## 数据库位置
 
-SQLite 数据库：`%APPDATA%/TodoTracker/todo.db`
+SQLite 数据库：`%APPDATA%/todo-tracker/todo.db`
 （ Electron `app.getPath('userData')`，包含 WAL 日志文件）。
-窗口位置状态：`%APPDATA%/TodoTracker/window-state.json`。
+窗口位置状态：`%APPDATA%/todo-tracker/window-state.json`。
 界面内可通过侧边栏「数据库位置」按钮直接打开所在目录。
 
 ## 键盘快捷键
@@ -87,12 +95,18 @@ src/                  渲染进程 (React)
 ## 构建 Windows 可执行文件
 
 ```bash
-npm run dist
+npm run dist     # NSIS 安装包
+npm run pack     # 免安装版（release/win-unpacked/TodoTracker.exe，可直接运行）
 ```
 
-产物输出在 `release/TodoTracker-x.y.z-setup.exe`（NSIS 安装包）。
+产物输出在 `release/`。
 构建前请确保 `node scripts/fetch-native.mjs` 已成功（better-sqlite3 使用
 `electron-v130` 预编译版本，与 Electron 33 匹配）。
+
+配置说明（electron-builder.yml）：
+- `npmRebuild: false` —— 不做原生模块源码重建，直接打包预编译的 better_sqlite3.node（经 asarUnpack 解包）。
+- `win.signAndEditExecutable: false` —— 个人本地应用不做代码签名，可避免打包时下载
+  winCodeSign（在无管理员特权的账户下解压其符号链接会失败）。如需签名可改回 `true`。
 
 ## 路线图（MVP 之后）
 
