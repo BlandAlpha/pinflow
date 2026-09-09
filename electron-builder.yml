@@ -1,0 +1,34 @@
+appId: com.local.todo-tracker
+productName: TodoTracker
+copyright: Local-first personal todo manager
+
+directories:
+  output: release
+  buildResources: resources
+
+# 仅打包构建产物；生产依赖 (better-sqlite3 等) 由 electron-builder 自动带入
+files:
+  - out/**
+  - package.json
+
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+
+extraResources:
+  - from: resources
+    to: resources
+
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Todo Tracker
+  artifactName: TodoTracker-${version}-setup.${ext}
