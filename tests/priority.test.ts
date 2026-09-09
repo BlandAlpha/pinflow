@@ -18,6 +18,8 @@ function todo(patch: Partial<Todo> = {}): Todo {
     completedAt: null,
     tags: [],
     pinned: false,
+    classified: false,
+    order: 0,
     steps: [],
     ...patch
   }
