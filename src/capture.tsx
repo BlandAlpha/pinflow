@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Zap } from 'lucide-react'
+import { CornerDownLeft, Zap } from 'lucide-react'
 import './index.css'
 
 /**
- * 全局快速捕获窗口：
- * Ctrl+Shift+Space -> 输入 -> Enter 保存到收件箱 -> 窗口自动关闭；Esc 取消。
+ * 全局快速捕获：命令面板风格。
+ * 快捷键 -> 输入 -> Enter 保存 -> 关闭；Esc 取消。永远不需要先分类。
  */
 function CaptureApp() {
   const [value, setValue] = useState('')
@@ -17,7 +17,6 @@ function CaptureApp() {
     return window.capture?.onReady(() => {
       setValue('')
       ref.current?.focus()
-      ref.current?.select()
     })
   }, [])
 
@@ -35,25 +34,34 @@ function CaptureApp() {
   }
 
   return (
-    <div className="flex h-screen flex-col justify-center gap-1.5 border-b border-primary/40 bg-background px-3 pb-2.5 pt-1.5 shadow-2xl">
-      <div className="flex items-center gap-2">
-        <Zap className="h-4 w-4 shrink-0 text-primary" fill="currentColor" />
-        <input
-          ref={ref}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit()
-            if (e.key === 'Escape') void window.capture.close()
-          }}
-          placeholder="要做什么？"
-          autoFocus
-          spellCheck={false}
-          className="w-full bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
-        />
-      </div>
-      <div className="pl-6 text-[11px] leading-none text-muted-foreground">
-        Enter 保存到收件箱 · Esc 取消
+    <div className="h-screen bg-background p-1.5">
+      <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-pop">
+        <div className="flex flex-1 items-center gap-2.5 px-3">
+          <Zap className="h-4 w-4 shrink-0 text-primary" />
+          <input
+            ref={ref}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit()
+              if (e.key === 'Escape') void window.capture.close()
+            }}
+            placeholder="要做什么？"
+            autoFocus
+            spellCheck={false}
+            className="w-full bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
+          />
+          {value.trim() && (
+            <span className="flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0.5 text-2xs text-muted-foreground">
+              <CornerDownLeft className="h-3 w-3" />
+              保存
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center justify-between border-t border-border px-3 py-1.5 text-2xs text-muted-foreground">
+          <span>保存到收件箱 · 之后再去分类</span>
+          <span>Enter 保存 · Esc 取消</span>
+        </div>
       </div>
     </div>
   )

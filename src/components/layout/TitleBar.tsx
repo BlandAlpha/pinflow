@@ -13,12 +13,12 @@ export function TitleBar() {
   const view = useTodos((s) => s.view)
 
   return (
-    <header className="app-drag flex h-9 shrink-0 select-none items-center gap-2 border-b border-border bg-card/60 px-3">
-      <div className="flex items-center gap-1.5 text-primary">
+    <header className="app-drag flex h-9 shrink-0 select-none items-center gap-2 border-b border-border bg-surface-2/60 px-3">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
         <CheckSquare className="h-3.5 w-3.5" />
-        <span className="text-[12px] font-semibold tracking-wide">Todo Tracker</span>
+        <span className="text-2xs font-medium tracking-wide">Todo Tracker</span>
       </div>
-      <span className="text-[12px] text-muted-foreground">/ {VIEW_TITLES[view]}</span>
+      <span className="text-2xs text-muted-foreground/70">/ {VIEW_TITLES[view]}</span>
 
       <div className="flex-1" />
 
@@ -26,7 +26,7 @@ export function TitleBar() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-9 rounded-none hover:bg-secondary"
+          className="h-7 w-9 rounded-none text-muted-foreground hover:bg-accent"
           title="最小化"
           onClick={() => void window.api.minimizeWindow()}
         >
@@ -35,7 +35,7 @@ export function TitleBar() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-9 rounded-none hover:bg-secondary"
+          className="h-7 w-9 rounded-none text-muted-foreground hover:bg-accent"
           title="最大化 / 还原"
           onClick={() => void window.api.toggleMaximizeWindow()}
         >
@@ -44,7 +44,7 @@ export function TitleBar() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-9 rounded-none hover:bg-destructive hover:text-white"
+          className="h-7 w-9 rounded-none text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
           title="隐藏到托盘"
           onClick={() => void window.api.closeWindow()}
         >
