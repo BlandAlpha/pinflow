@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { BrowserWindow, app, screen } from 'electron'
+import { resolvedTheme } from './prefs'
 import { appState } from './state'
 
 interface WindowStateFile {
@@ -56,7 +57,7 @@ export function createMainWindow(): BrowserWindow {
     x: state?.x,
     y: state?.y,
     frame: false,
-    backgroundColor: '#0b0f19',
+    backgroundColor: resolvedTheme() === 'dark' ? '#121316' : '#fafafa',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -103,7 +104,7 @@ export function createCaptureWindow(): BrowserWindow {
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
-    backgroundColor: '#0b0f19',
+    backgroundColor: resolvedTheme() === 'dark' ? '#121316' : '#fafafa',
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/capture.js'),

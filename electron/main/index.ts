@@ -1,8 +1,9 @@
 import { join } from 'node:path'
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { app, globalShortcut } from 'electron'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { app, globalShortcut, nativeTheme } from 'electron'
 import { initDatabase } from './db'
-import { registerIpcHandlers } from './ipc'
+import { broadcastTheme, registerIpcHandlers } from './ipc'
+import { applyTheme, getPrefs, initPrefs, setTheme } from './prefs'
 import { appState } from './state'
 import { createTray } from './tray'
 import {
@@ -20,15 +21,21 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** 带超时的等待：冒烟测试中任何一步卡住都不能阻塞退出 */
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | null> {
-  return Promise.race([
-    p.catch((err) => {
-      console.warn(`[smoke] ${label} 失败:`, err)
-      return null
-    }),
-    sleep(ms).then(() => {
+  let timer: NodeJS.Timeout | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
       console.warn(`[smoke] ${label} 超时`)
-      return null
-    })
+      resolve(null)
+    }, ms)
+  })
+  return Promise.race([
+    p
+      .catch((err) => {
+        console.warn(`[smoke] ${label} 失败:`, err)
+        return null
+      })
+      .finally(() => timer && clearTimeout(timer)),
+    timeout
   ])
 }
 
@@ -44,46 +51,106 @@ async function runSmokeTest(): Promise<void> {
   log(`persistence: ${db.listTodos().length} todos already stored`)
 
   await sleep(1200)
-  const t = db.createTodo({ title: '整理季度评审材料', importance: 'high', urgency: 'high' })
-  db.createTodo({
+  // 示例数据：覆盖「未分类 / 已分类 / 有截止 / 有步骤 / 已逾期」几种状态
+  // 已有数据时跳过，便于同一份数据分别跑深色/浅色截图
+  if (db.listTodos().length === 0) {
+  const q1 = db.createTodo({ title: '整理季度评审材料' })
+  db.setQuadrant(q1.id, 1)
+
+  const q2 = db.createTodo({ title: '重构订单导入脚本' })
+  db.setQuadrant(q2.id, 2)
+
+  const due = db.createTodo({
     title: '准备 CRM 会议',
     dueAt: new Date(Date.now() + 3 * 3600 * 1000).toISOString()
   })
-  db.createTodo({ title: '阅读 Electron 文档', importance: 'low', urgency: 'low' })
-  const withSteps = db.createTodo({ title: '带步骤的任务：发布新版本' })
+  db.setQuadrant(due.id, 3)
+
+  const overdue = db.createTodo({
+    title: '补交上月费用报销',
+    dueAt: new Date(Date.now() - 26 * 3600 * 1000).toISOString()
+  })
+  db.setQuadrant(overdue.id, 1)
+
+  db.createTodo({ title: '看看有没有新的分析库' })
+  db.createTodo({ title: '把工位上的线缆整理一下' })
+
+  const withSteps = db.createTodo({ title: '发布新版本' })
+  db.setQuadrant(withSteps.id, 2)
   db.addStep(withSteps.id, '更新版本号')
   db.addStep(withSteps.id, '打 tag')
   db.addStep(withSteps.id, '上传安装包')
-  log(`created todos, id=${t.id}`)
+  db.toggleStep((db.getTodo(withSteps.id).steps[0] ?? { id: '' }).id)
+  log(`created todos, q1=${q1.id}`)
+  } else {
+    log('sample data already exists, skip seeding')
+  }
 
   const main = getMainWindow()
   if (main) {
+    // 可选：指定截图分辨率（--smoke-size=1280x720）与文件名后缀（--smoke-tag=hd）
+    const sizeArg = process.argv.find((a) => a.startsWith('--smoke-size='))
+    if (sizeArg) {
+      const [w, h] = sizeArg
+        .slice('--smoke-size='.length)
+        .split('x')
+        .map((n) => Number.parseInt(n, 10))
+      if (w > 0 && h > 0) {
+        if (main.isMaximized()) main.unmaximize()
+        main.setSize(w, h)
+        main.center()
+        log(`window resized to ${w}x${h}`)
+      }
+    }
     // 刷新以载入新写入的示例数据（不 await，避免加载事件竞态阻塞）
     void main.webContents.reload()
     await sleep(2500)
 
-    // 依次切换视图截图
-    for (const v of ['today', 'matrix', 'all']) {
-      await main.webContents.executeJavaScript(
-        `document.querySelectorAll('nav button')[${v === 'today' ? 1 : v === 'matrix' ? 2 : 3}].click()`
+    const nav = (index: number) =>
+      withTimeout(
+        main.webContents.executeJavaScript(
+          `document.querySelectorAll('nav button')[${index}].click()`
+        ),
+        4000,
+        `nav ${index}`
       )
-      await sleep(600)
-      const img = await main.webContents.capturePage()
-      writeFileSync(join(shotDir, `${v}.png`), img.toPNG())
-      log(`shot ${v}`)
+
+    const tagArg = process.argv.find((a) => a.startsWith('--smoke-tag='))
+    const tag = tagArg ? `-${tagArg.slice('--smoke-tag='.length)}` : ''
+    const shot = async (name: string) => {
+      const img = await withTimeout(main.webContents.capturePage(), 5000, `capture ${name}`)
+      if (!img) return
+      writeFileSync(join(shotDir, `${name}${tag}.png`), img.toPNG())
+      log(`shot ${name}${tag}`)
     }
 
-    // 回到收件箱并打开详情
-    await main.webContents.executeJavaScript(`document.querySelectorAll('nav button')[0].click()`)
-    await sleep(300)
-    await main.webContents.executeJavaScript(
-      `document.querySelector('main [role="button"]')?.click()`
-    )
-    await sleep(700)
-    const detail = await withTimeout(main.webContents.capturePage(), 5000, 'capture detail')
-    if (detail) {
-      writeFileSync(join(shotDir, 'detail.png'), detail.toPNG())
-      log('shot detail')
+    // 可选：只截指定视图（--smoke-views=inbox,matrix）
+    const viewsArg = process.argv.find((a) => a.startsWith('--smoke-views='))
+    const wanted = viewsArg ? viewsArg.slice('--smoke-views='.length).split(',') : null
+
+    for (const [index, name] of [
+      [0, 'inbox'],
+      [1, 'today'],
+      [2, 'matrix'],
+      [3, 'all']
+    ] as const) {
+      if (wanted && !wanted.includes(name)) continue
+      await nav(index)
+      await sleep(600)
+      await shot(name)
+    }
+
+    // 打开详情面板
+    if (!wanted || wanted.includes('detail')) {
+      await nav(0)
+      await sleep(400)
+      await withTimeout(
+        main.webContents.executeJavaScript(`document.querySelector('main .task-card')?.click()`),
+        4000,
+        'open detail'
+      )
+      await sleep(700)
+      await shot('detail')
     }
 
     const shortcutOk = globalShortcut.isRegistered(CAPTURE_SHORTCUT)
@@ -158,9 +225,21 @@ if (!singleInstance) {
     // 0. 冒烟测试使用独立数据目录
     if (process.argv.includes('--smoke')) {
       app.setPath('userData', join(app.getPath('userData'), 'smoke'))
+      if (process.argv.includes('--smoke-reset')) {
+        for (const f of ['todo.db', 'todo.db-shm', 'todo.db-wal', 'prefs.json']) {
+          rmSync(join(app.getPath('userData'), f), { force: true })
+        }
+      }
     }
 
-    // 1. 本地数据库
+    // 1. 本地偏好（主题）与数据库
+    initPrefs(join(app.getPath('userData'), 'prefs.json'))
+    // 冒烟测试可用参数强制主题（必须在 initPrefs 之后才能落盘）
+    if (process.argv.includes('--smoke-light')) setTheme('light')
+    if (process.argv.includes('--smoke-dark')) setTheme('dark')
+    applyTheme(getPrefs().theme)
+    // 系统主题变化时同步给所有窗口
+    nativeTheme.on('updated', () => broadcastTheme(getPrefs().theme))
     initDatabase(join(app.getPath('userData'), 'todo.db'))
 
     // 2. IPC

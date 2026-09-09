@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/ipc'
 import type { CaptureApi } from '@shared/ipc'
+import { installThemeBootstrap } from './theme'
+
+installThemeBootstrap()
 
 const api: CaptureApi = {
   submit: (title) => ipcRenderer.invoke(IPC.CAPTURE_SUBMIT, title),

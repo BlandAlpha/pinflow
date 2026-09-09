@@ -1,7 +1,9 @@
 import type {
+  AppPrefs,
   CreateTodoInput,
   Quadrant,
   Step,
+  ThemeMode,
   Todo,
   UpdateTodoInput
 } from './types'
@@ -14,6 +16,7 @@ export const IPC = {
   TODOS_DELETE: 'todos:delete',
   TODOS_TOGGLE: 'todos:toggle',
   TODOS_SET_QUADRANT: 'todos:setQuadrant',
+  TODOS_REORDER: 'todos:reorder',
   TODOS_ADD_TAG: 'todos:addTag',
   TODOS_REMOVE_TAG: 'todos:removeTag',
   TODOS_ALL_TAGS: 'todos:allTags',
@@ -34,6 +37,8 @@ export const IPC = {
   APP_WIN_CLOSE: 'app:winClose',
   APP_SET_AUTO_LAUNCH: 'app:setAutoLaunch',
   APP_GET_AUTO_LAUNCH: 'app:getAutoLaunch',
+  APP_GET_PREFS: 'app:getPrefs',
+  APP_SET_THEME: 'app:setTheme',
 
   CAPTURE_CLOSE: 'capture:close',
   CAPTURE_SUBMIT: 'capture:submit',
@@ -54,6 +59,7 @@ export interface TodoApi {
   deleteTodo(id: string): Promise<boolean>
   toggleTodo(id: string): Promise<Todo>
   setQuadrant(id: string, quadrant: Quadrant): Promise<Todo>
+  reorderTodos(orderedIds: string[]): Promise<Todo[]>
   addTag(id: string, tag: string): Promise<Todo>
   removeTag(id: string, tag: string): Promise<Todo>
   allTags(): Promise<string[]>
@@ -72,10 +78,14 @@ export interface TodoApi {
   closeWindow(): Promise<void>
   getAutoLaunch(): Promise<boolean>
   setAutoLaunch(enabled: boolean): Promise<boolean>
+  getPrefs(): Promise<AppPrefs>
+  setTheme(theme: ThemeMode): Promise<AppPrefs>
   /** 订阅「数据已变更」（来自快速捕获窗口等） */
   onDataChanged(cb: () => void): () => void
   /** 订阅「新建任务」请求（系统托盘菜单） */
   onNewTask(cb: () => void): () => void
+  /** 首帧主题快照（preload 同步注入，避免主题闪烁） */
+  themeSnapshot: { mode: ThemeMode; resolved: 'light' | 'dark' }
 }
 
 /** 快速捕获窗口渲染进程可用 API */

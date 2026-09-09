@@ -1,7 +1,22 @@
 import { BrowserWindow, app, ipcMain, shell } from 'electron'
 import { IPC } from '@shared/ipc'
-import type { CreateTodoInput, Quadrant, Step, Todo, UpdateTodoInput } from '@shared/types'
+import type {
+  AppPrefs,
+  CreateTodoInput,
+  Quadrant,
+  Step,
+  ThemeMode,
+  Todo,
+  UpdateTodoInput
+} from '@shared/types'
 import * as db from './db'
+import { applyTheme, getPrefs, resolvedTheme, setTheme } from './prefs'
+
+/** preload 首帧同步读取的主题快照 */
+export interface ThemeSnapshot {
+  mode: ThemeMode
+  resolved: 'light' | 'dark'
+}
 import {
   closeMainWindow,
   hideCaptureWindow,
@@ -14,6 +29,14 @@ import {
 export function broadcastDataChanged(): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(IPC.DATA_CHANGED)
+  }
+}
+
+/** 主题变更广播 */
+export function broadcastTheme(mode: ThemeMode): void {
+  const snapshot: ThemeSnapshot = { mode, resolved: resolvedTheme() }
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('app:theme:changed', snapshot)
   }
 }
 
@@ -44,6 +67,11 @@ export function registerIpcHandlers(): void {
     const todo = db.setQuadrant(id, q)
     broadcastDataChanged()
     return todo
+  })
+  ipcMain.handle(IPC.TODOS_REORDER, (_e, orderedIds: string[]): Todo[] => {
+    const todos = db.reorderTodos(orderedIds)
+    broadcastDataChanged()
+    return todos
   })
   ipcMain.handle(IPC.TODOS_ADD_TAG, (_e, id: string, tag: string): Todo => {
     const todo = db.addTag(id, tag)
@@ -95,6 +123,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.APP_WIN_CLOSE, (): void => closeMainWindow())
   ipcMain.handle(IPC.APP_GET_AUTO_LAUNCH, (): boolean => {
     return app.getLoginItemSettings().openAtLogin
+  })
+  // 同步通道：preload 在首帧前拿到主题，避免主题闪烁
+  ipcMain.on('app:theme:sync', (e) => {
+    e.returnValue = { mode: getPrefs().theme, resolved: resolvedTheme() } as ThemeSnapshot
+  })
+  ipcMain.handle(IPC.APP_GET_PREFS, (): AppPrefs => getPrefs())
+  ipcMain.handle(IPC.APP_SET_THEME, (_e, theme: ThemeMode): AppPrefs => {
+    const prefs = setTheme(theme)
+    applyTheme(prefs.theme)
+    broadcastTheme(prefs.theme)
+    return prefs
   })
   ipcMain.handle(IPC.APP_SET_AUTO_LAUNCH, (_e, enabled: boolean): boolean => {
     app.setLoginItemSettings({

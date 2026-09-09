@@ -2,34 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   语义化设计令牌（Light / Dark）
+   —— 中性为主，语义色仅用于有意义的状态 ——
+   ============================================================ */
 @layer base {
   :root {
-    --background: 224 44% 5%;
-    --foreground: 214 32% 94%;
-    --card: 224 38% 8%;
-    --card-foreground: 214 32% 94%;
-    --popover: 224 38% 9%;
-    --popover-foreground: 214 32% 94%;
-    --primary: 239 84% 67%;
+    /* 浅色：中性偏暖的灰白，避免刺眼纯白 */
+    --background: 220 16% 96.5%;
+    --surface: 0 0% 100%;
+    --surface-2: 220 20% 98.5%;
+    --foreground: 220 14% 16%;
+    --card: 220 20% 98.5%;
+    --card-foreground: 220 14% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 14% 16%;
+    --muted: 220 14% 93.5%;
+    --muted-foreground: 220 8% 44%;
+    --accent: 220 14% 92%;
+    --accent-foreground: 220 14% 16%;
+    --primary: 214 82% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 221 20% 15%;
-    --secondary-foreground: 214 32% 94%;
-    --muted: 221 20% 13%;
-    --muted-foreground: 217 14% 60%;
-    --accent: 221 22% 17%;
-    --accent-foreground: 214 32% 96%;
-    --destructive: 0 68% 48%;
+    --primary-soft: 214 82% 95%;
+    --destructive: 0 66% 46%;
     --destructive-foreground: 0 0% 100%;
-    --border: 221 18% 17%;
-    --input: 221 18% 19%;
-    --ring: 239 84% 67%;
-    --radius: 0.6rem;
+    --warn: 32 82% 44%;
+    --warn-soft: 36 90% 94%;
+    --danger-soft: 0 70% 96%;
+    --success: 152 40% 38%;
+    --border: 220 13% 88%;
+    --border-strong: 220 10% 80%;
+    --input: 220 13% 88%;
+    --ring: 214 82% 52%;
+    --radius: 8px;
 
-    /* 四象限 */
-    --q1: 0 70% 52%;
-    --q2: 217 91% 58%;
-    --q3: 36 92% 52%;
-    --q4: 215 15% 46%;
+    /* 四象限：极低饱和 */
+    --q1: 4 58% 50%;
+    --q1-tint: 6 45% 96.5%;
+    --q2: 214 58% 52%;
+    --q2-tint: 214 42% 96.5%;
+    --q3: 32 62% 44%;
+    --q3-tint: 34 48% 95.5%;
+    --q4: 220 9% 42%;
+    --q4-tint: 220 14% 95.5%;
+
+    --shadow-card: 0 1px 2px hsl(220 14% 16% / 0.05);
+    --shadow-raised: 0 6px 16px -6px hsl(220 14% 16% / 0.18);
+    --shadow-pop: 0 8px 28px -8px hsl(220 14% 16% / 0.22);
+  }
+
+  .dark {
+    /* 深色：中性炭灰，不偏蓝 */
+    --background: 0 0% 7.5%;
+    --surface: 0 0% 10%;
+    --surface-2: 0 0% 12%;
+    --foreground: 220 8% 91%;
+    --card: 0 0% 11.5%;
+    --card-foreground: 220 8% 91%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 220 8% 91%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 220 6% 58%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 220 8% 91%;
+    --primary: 214 80% 60%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 214 40% 20%;
+    --destructive: 0 62% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --warn: 32 78% 56%;
+    --warn-soft: 32 30% 17%;
+    --danger-soft: 0 30% 18%;
+    --success: 152 36% 48%;
+    --border: 0 0% 17%;
+    --border-strong: 0 0% 24%;
+    --input: 0 0% 18%;
+    --ring: 214 80% 60%;
+
+    --q1: 4 58% 58%;
+    --q1-tint: 4 22% 13%;
+    --q2: 214 55% 62%;
+    --q2-tint: 214 22% 13%;
+    --q3: 32 62% 56%;
+    --q3-tint: 32 24% 13%;
+    --q4: 220 8% 52%;
+    --q4-tint: 220 8% 12%;
+
+    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3);
+    --shadow-raised: 0 8px 20px -8px hsl(0 0% 0% / 0.6);
+    --shadow-pop: 0 10px 32px -10px hsl(0 0% 0% / 0.7);
   }
 
   * {
@@ -45,28 +106,65 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family:
+      'Inter var',
+      'Inter',
+      'Segoe UI Variable Text',
       'Segoe UI',
       system-ui,
       -apple-system,
+      'PingFang SC',
+      'Microsoft YaHei UI',
       'Microsoft YaHei',
       sans-serif;
     font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* 自定义滚动条 */
   ::-webkit-scrollbar {
-    width: 9px;
-    height: 9px;
+    width: 10px;
+    height: 10px;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
-    border-radius: 6px;
+    background: hsl(var(--border-strong));
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.45);
+    background: hsl(var(--muted-foreground) / 0.6);
+    background-clip: content-box;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
+  }
+}
+
+@layer components {
+  /* 极轻量的卡片/便签基底 */
+  .task-card {
+    @apply rounded-lg border border-border bg-card text-card-foreground;
+    box-shadow: var(--shadow-card);
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease,
+      transform 120ms ease,
+      background-color 120ms ease;
+  }
+  .task-card:hover {
+    @apply border-border-strong;
+  }
+  .task-card[data-selected='true'] {
+    @apply border-primary/70;
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.35);
+  }
+  .task-card[data-dragging='true'] {
+    @apply opacity-60;
+    box-shadow: var(--shadow-raised);
+    transform: scale(1.02) rotate(-0.4deg);
+  }
+  .task-card[data-flat='true'] {
+    @apply border-transparent bg-transparent shadow-none;
   }
 }
 
@@ -76,5 +174,15 @@
   }
   .app-no-drag {
     -webkit-app-region: no-drag;
+  }
+  .surface-2 {
+    background: hsl(var(--surface-2));
+  }
+  .text-quiet {
+    color: hsl(var(--muted-foreground));
+  }
+  /* 拖拽时禁止文本选中干扰 */
+  .dragging-none {
+    user-select: none;
   }
 }
