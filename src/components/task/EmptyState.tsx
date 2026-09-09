@@ -1,25 +1,22 @@
-import { Keyboard } from 'lucide-react'
-
 export function EmptyState({
   title,
   description,
-  showShortcut = false
+  hint
 }: {
   title: string
   description?: string
-  showShortcut?: boolean
+  hint?: string
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">
-      <div className="rounded-full bg-secondary p-3 text-muted-foreground">
-        <Keyboard className="h-6 w-6" />
-      </div>
+    <div className="flex flex-1 flex-col items-center justify-center gap-1.5 py-16 text-center">
       <div className="text-[13px] font-medium">{title}</div>
-      {description && <div className="max-w-xs text-[12px] text-muted-foreground">{description}</div>}
-      {showShortcut && (
-        <div className="mt-2 rounded-md border border-border bg-secondary/60 px-2.5 py-1 font-mono text-[12px] text-muted-foreground">
-          Ctrl + Shift + Space 全局快速捕获
-        </div>
+      {description && (
+        <div className="max-w-xs text-2xs text-muted-foreground">{description}</div>
+      )}
+      {hint && (
+        <kbd className="mt-1 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
+          {hint}
+        </kbd>
       )}
     </div>
   )

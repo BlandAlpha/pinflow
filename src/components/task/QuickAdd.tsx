@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react'
 import { useTodos } from '@/store/todos'
 import { Input } from '@/components/ui/input'
 
-/** 顶部快速新增输入框：输入后回车即创建到收件箱 */
+/** 顶部快速新增：只输入标题，其余交给系统 */
 export function QuickAdd() {
   const create = useTodos((s) => s.create)
   const [value, setValue] = useState('')
@@ -35,8 +35,8 @@ export function QuickAdd() {
       <Input
         ref={ref}
         value={value}
-        placeholder="添加任务，回车保存（N 快速聚焦）"
-        className="h-9 pl-8"
+        placeholder="记下一件事，回车即可（N 快速聚焦）"
+        className="h-9 border-border bg-background pl-8 text-[13px]"
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') void submit()
