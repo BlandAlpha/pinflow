@@ -104,7 +104,7 @@ export function computeVisible(
       const active = todos.filter((t) => t.status === 'active')
       return sortByPriority(active, now)
     }
-    case 'matrix':
+    case 'kanban':
       // 看板自行拆分为「四象限 + 未分类暂存区」
       return todos
         .filter((t) => t.status === 'active')

@@ -2,6 +2,9 @@ node_modules
 out
 dist
 release
+release2
+release-v2
+release-v3
 .smoke
 *.log
 .DS_Store

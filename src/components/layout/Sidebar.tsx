@@ -16,7 +16,7 @@ const NAV: {
 }[] = [
   { key: 'inbox', label: '收件箱', icon: Inbox, hint: '刚记下来、还没分类的事' },
   { key: 'today', label: '今天', icon: Sun, hint: '系统排好的行动顺序' },
-  { key: 'matrix', label: '四象限', icon: LayoutGrid, hint: '拖一拖就能分类' },
+  { key: 'kanban', label: '看板', icon: LayoutGrid, hint: 'Kanban · 拖一拖就能分类' },
   { key: 'all', label: '全部任务', icon: ListTree, hint: '搜索、筛选、归档' }
 ]
 
@@ -36,7 +36,7 @@ export function Sidebar() {
   const counts: Record<ViewKey, number> = {
     inbox: todos.filter((t) => t.status === 'active' && isInboxTask(t)).length,
     today: todos.filter((t) => t.status === 'active').length,
-    matrix: todos.filter((t) => t.status === 'active' && t.classified).length,
+    kanban: todos.filter((t) => t.status === 'active' && t.classified).length,
     all: todos.length
   }
 

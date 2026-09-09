@@ -11,11 +11,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 type DropZone = { quadrant: Quadrant | 'unclassified'; beforeId?: string }
 
 /**
- * 真正的 2×2 艾森豪威尔看板。
+ * 看板（Kanban）：2×2 艾森豪威尔四象限同屏。
  * 拖拽是主要交互：卡片可跨象限移动，也可在同一象限内重排。
  * 未分类任务停在底部暂存区，拖入象限即完成分类。
  */
-export function MatrixBoard() {
+export function KanbanBoard() {
   const todos = useVisibleTodos()
   const setQuadrant = useTodos((s) => s.setQuadrant)
   const reorder = useTodos((s) => s.reorder)

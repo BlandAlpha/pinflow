@@ -14,7 +14,7 @@ import { InlineSteps } from '@/components/task/InlineSteps'
 
 export interface TaskCardProps {
   todo: Todo
-  /** list = 列表式（收件箱/今天）；board = 卡片式（四象限看板） */
+  /** list = 列表式（收件箱/今天）；board = 卡片式（看板） */
   variant?: 'list' | 'board'
   selected?: boolean
   onOpen?: () => void

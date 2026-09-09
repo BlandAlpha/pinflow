@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 const VIEW_TITLES: Record<string, string> = {
   inbox: '收件箱',
   today: '今天',
-  matrix: '四象限',
+  kanban: '看板',
   all: '全部任务'
 }
 

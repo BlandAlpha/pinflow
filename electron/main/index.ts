@@ -124,14 +124,14 @@ async function runSmokeTest(): Promise<void> {
       log(`shot ${name}${tag}`)
     }
 
-    // 可选：只截指定视图（--smoke-views=inbox,matrix）
+    // 可选：只截指定视图（--smoke-views=inbox,kanban）
     const viewsArg = process.argv.find((a) => a.startsWith('--smoke-views='))
     const wanted = viewsArg ? viewsArg.slice('--smoke-views='.length).split(',') : null
 
     for (const [index, name] of [
       [0, 'inbox'],
       [1, 'today'],
-      [2, 'matrix'],
+      [2, 'kanban'],
       [3, 'all']
     ] as const) {
       if (wanted && !wanted.includes(name)) continue

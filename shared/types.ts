@@ -74,7 +74,7 @@ export interface QuadrantValue {
 }
 
 /** 主窗口视图 */
-export type ViewKey = 'inbox' | 'today' | 'matrix' | 'all'
+export type ViewKey = 'inbox' | 'today' | 'kanban' | 'all'
 
 /** 全部筛选条件（All 视图） */
 export interface TodoFilter {
