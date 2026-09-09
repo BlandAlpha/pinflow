@@ -1,0 +1,93 @@
+import type {
+  CreateTodoInput,
+  Quadrant,
+  Step,
+  Todo,
+  UpdateTodoInput
+} from './types'
+
+/** 主进程 <-> 渲染进程 的 IPC 通道名 */
+export const IPC = {
+  TODOS_LIST: 'todos:list',
+  TODOS_CREATE: 'todos:create',
+  TODOS_UPDATE: 'todos:update',
+  TODOS_DELETE: 'todos:delete',
+  TODOS_TOGGLE: 'todos:toggle',
+  TODOS_SET_QUADRANT: 'todos:setQuadrant',
+  TODOS_ADD_TAG: 'todos:addTag',
+  TODOS_REMOVE_TAG: 'todos:removeTag',
+  TODOS_ALL_TAGS: 'todos:allTags',
+
+  STEPS_ADD: 'steps:add',
+  STEPS_UPDATE: 'steps:update',
+  STEPS_DELETE: 'steps:delete',
+  STEPS_TOGGLE: 'steps:toggle',
+  STEPS_REORDER: 'steps:reorder',
+
+  APP_DB_PATH: 'app:dbPath',
+  APP_OPEN_DB_DIR: 'app:openDbDir',
+  APP_QUIT: 'app:quit',
+  APP_SHOW_MAIN: 'app:showMain',
+  APP_HIDE_MAIN: 'app:hideMain',
+  APP_WIN_MIN: 'app:winMin',
+  APP_WIN_MAX: 'app:winMax',
+  APP_WIN_CLOSE: 'app:winClose',
+  APP_SET_AUTO_LAUNCH: 'app:setAutoLaunch',
+  APP_GET_AUTO_LAUNCH: 'app:getAutoLaunch',
+
+  CAPTURE_CLOSE: 'capture:close',
+  CAPTURE_SUBMIT: 'capture:submit',
+  CAPTURE_SAVED: 'capture:saved',
+  /** 主进程 -> 渲染进程：数据发生变更，需要刷新 */
+  DATA_CHANGED: 'data:changed',
+  /** 主进程 -> 渲染进程：请求打开新建任务输入框 */
+  REQUEST_NEW_TASK: 'app:newTask',
+  /** 主进程 -> 渲染进程：快速捕获窗口准备就绪 */
+  CAPTURE_READY: 'capture:ready'
+} as const
+
+/** 主窗口渲染进程可用 API */
+export interface TodoApi {
+  listTodos(): Promise<Todo[]>
+  createTodo(input: CreateTodoInput): Promise<Todo>
+  updateTodo(input: UpdateTodoInput): Promise<Todo>
+  deleteTodo(id: string): Promise<boolean>
+  toggleTodo(id: string): Promise<Todo>
+  setQuadrant(id: string, quadrant: Quadrant): Promise<Todo>
+  addTag(id: string, tag: string): Promise<Todo>
+  removeTag(id: string, tag: string): Promise<Todo>
+  allTags(): Promise<string[]>
+
+  addStep(todoId: string, title: string): Promise<Step>
+  updateStep(stepId: string, patch: Partial<Pick<Step, 'title' | 'completed'>>): Promise<Step>
+  deleteStep(stepId: string): Promise<boolean>
+  toggleStep(stepId: string): Promise<Step>
+  reorderSteps(todoId: string, orderedStepIds: string[]): Promise<Step[]>
+
+  dbPath(): Promise<string>
+  openDbDir(): Promise<void>
+  quitApp(): Promise<void>
+  minimizeWindow(): Promise<void>
+  toggleMaximizeWindow(): Promise<void>
+  closeWindow(): Promise<void>
+  getAutoLaunch(): Promise<boolean>
+  setAutoLaunch(enabled: boolean): Promise<boolean>
+  /** 订阅「数据已变更」（来自快速捕获窗口等） */
+  onDataChanged(cb: () => void): () => void
+  /** 订阅「新建任务」请求（系统托盘菜单） */
+  onNewTask(cb: () => void): () => void
+}
+
+/** 快速捕获窗口渲染进程可用 API */
+export interface CaptureApi {
+  submit(title: string): Promise<void>
+  close(): Promise<void>
+  onReady(cb: () => void): () => void
+}
+
+declare global {
+  interface Window {
+    api: TodoApi
+    capture: CaptureApi
+  }
+}
