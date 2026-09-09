@@ -8,3 +8,5 @@ release
 .vite
 coverage
 *.tsbuildinfo
+
+.native-cache
