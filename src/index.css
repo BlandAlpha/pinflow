@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 224 44% 5%;
+    --foreground: 214 32% 94%;
+    --card: 224 38% 8%;
+    --card-foreground: 214 32% 94%;
+    --popover: 224 38% 9%;
+    --popover-foreground: 214 32% 94%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 221 20% 15%;
+    --secondary-foreground: 214 32% 94%;
+    --muted: 221 20% 13%;
+    --muted-foreground: 217 14% 60%;
+    --accent: 221 22% 17%;
+    --accent-foreground: 214 32% 96%;
+    --destructive: 0 68% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 221 18% 17%;
+    --input: 221 18% 19%;
+    --ring: 239 84% 67%;
+    --radius: 0.6rem;
+
+    /* 四象限 */
+    --q1: 0 70% 52%;
+    --q2: 217 91% 58%;
+    --q3: 36 92% 52%;
+    --q4: 215 15% 46%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family:
+      'Segoe UI',
+      system-ui,
+      -apple-system,
+      'Microsoft YaHei',
+      sans-serif;
+    font-size: 13px;
+  }
+
+  /* 自定义滚动条 */
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.45);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .app-drag {
+    -webkit-app-region: drag;
+  }
+  .app-no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
