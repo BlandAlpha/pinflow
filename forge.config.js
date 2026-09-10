@@ -12,9 +12,14 @@ module.exports = {
     // exe 文件本身的图标（Windows 必须是 .ico）；不配则 exe 用 Electron 默认图标。
     // maker-squirrel 的 setupIcon 只管安装包图标，与此互不替代。
     icon: './resources/icon.ico',
-    // 把 resources/ 复制进 <app>/resources/，供运行时读取
+    // 把 resources/ 复制进 <app>/resources/resources/，供运行时读取
     // （windows.ts 里 process.resourcesPath/resources/icon.png、tray.png 的路径约定）
-    extraResources: [{ from: './resources', to: 'resources' }],
+    //
+    // 两个坑（@electron/packager 18）：
+    // 1. 键名是单数 extraResource，写成复数会被静默忽略（不报错，图标就是不进包）；
+    // 2. 只接受字符串路径，复制目标是 resources/<basename>，
+    //    不支持 { from, to } 对象（那是 electron-builder 的写法，传了会直接抛错）。
+    extraResource: ['./resources'],
   },
   rebuildConfig: {},
   makers: [
