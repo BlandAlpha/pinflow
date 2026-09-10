@@ -3,7 +3,7 @@
 本地优先的 Windows 桌面 Todo 管理器：全局快速捕获 → 系统自动组织 → 你只在需要时纠正。
 
 - 无账号、无云同步、无遥测，数据 100% 存储在本地 SQLite。
-- 技术栈：Electron 33 + React 18 + TypeScript + Vite (electron-vite) + better-sqlite3 + Zustand + Tailwind CSS + shadcn/ui（Radix 原语）。
+- 技术栈：Electron 33 + React 18 + TypeScript + Vite (electron-vite) + better-sqlite3 + Zustand + Tailwind CSS + shadcn/ui（Radix 原语），打包用 Electron Forge。
 
 ## 设计原则
 
@@ -19,11 +19,18 @@
 | --- | --- | --- |
 | **收件箱 Inbox** | 还有什么没归位？ | 分诊台：卡片直接操作（点标题改名、点优先级徽标调 2D 选择器、点日期改截止、点进度展开步骤） |
 | **今天 Today** | 现在该做什么？ | 卡片分区：现在做 / 接下来 / 稍后（按优先级评分阈值 45 / 28 自动划分），大字号标题 + 安静元信息 |
-| **白板 Board** | 这件事值不值得做？ | 自由二维画布：任务是便签，可拖到任意位置并即时持久化；中轴/四角有弱提示，未落点的任务自动避让排布 |
+| **白板 Board** | 这件事值不值得做？ | 连续二维画布：任务是便签，按住即可拖动，松手即写库；滚轮以光标为锚点缩放（100%–300%，带补间）、左键拖空白处平移 |
 | **全部 All** | 找某个具体任务 | 更密集的工具化列表：搜索 / 状态 / 截止 / 排序筛选 |
 
 - 未落点任务（`board_x / board_y` 为空）只出现在收件箱；一旦拖动到白板或设定截止/置顶/标签，即视为已归类。
+- 白板坐标即 groundtruth：落点写库，所有视图双向同步，不做展示层避让。
 - 所有拖拽与勾选即时持久化，无确认弹窗。
+
+## 空间（工作 / 生活分离）
+
+- `spaces` 表存所有空间（默认「工作 / 生活」），任务通过 `space_id` 归属；所有视图、标签、计数都按当前空间硬过滤。
+- 侧边栏底栏的空间切换器一键切换；设置弹窗里可新建 / 改名 / 换图标与颜色 / 删除（删除时任务迁入其它空间，最后一个空间不可删）。
+- 当前空间记在 `prefs.json`，重启后保持；任务详情面板可把单条任务移动到别的空间。
 
 ## 主题
 
@@ -41,24 +48,20 @@ npm run dev            # 启动开发模式（主进程 + 渲染进程热更新�
 ```
 
 > 提示：
-> - 本机若没有 Visual Studio C++ 构建工具，不要执行 `electron-builder install-app-deps`
->   或 `npm rebuild`；better-sqlite3 直接使用官方预编译产物，由 `scripts/fetch-native.mjs`
->   按 Electron 的 ABI（当前 electron-v130）自动下载匹配版本。
+> - 本机若没有 Visual Studio C++ 构建工具，不要执行 `npm rebuild`；better-sqlite3 直接使用官方
+>   预编译产物，由 `scripts/fetch-native.mjs` 按 Electron 的 ABI（当前 electron-v130）自动下载匹配版本。
 > - 在受限/自动化终端中若启动 Electron 报 `electron.app undefined`，请清除
 >   `ELECTRON_RUN_AS_NODE` 环境变量后再运行。
-> - 打包下载缓慢或失败时使用镜像：
+> - 下载 Electron 二进制缓慢时使用镜像（已写入 `.npmrc`）：
 >   `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
->   `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`
 
 ```bash
-npm run typecheck      # TypeScript 类型检查
-npm run test           # 单元测试 (vitest)：优先级评分 + 视图模型
+npm run typecheck      # TypeScript 类型检查（src + shared + electron + tests）
+npm run test           # 单元测试 (vitest)：优先级评分 + 视图模型 + 白板坐标
 npm run build          # 构建到 app-build/
 npm run smoke          # 构建 + 自动化冒烟测试（截图输出到 .smoke/）
-npm run package        # 打包免安装版 (forge-dist/win32-x64/TodoTracker.exe)
-npm run make           # 构建并打包 Windows 安装包 (forge-dist/make/ 下的 Squirrel 安装包)
-npm run pack           # 打包免安装版 (release/win-unpacked/TodoTracker.exe)
-npm run dist           # 打包 Windows 安装包 (release/TodoTracker-x.y.z-setup.exe)
+npm run package        # 打包免安装版 (forge-dist/todo-tracker-win32-x64/todo-tracker.exe)
+npm run make           # 构建并打包 Squirrel 安装包 (forge-dist/make/squirrel.windows/x64/)
 ```
 
 冒烟测试可选参数：
@@ -68,6 +71,8 @@ npm run dist           # 打包 Windows 安装包 (release/TodoTracker-x.y.z-set
 | `--smoke-reset` | 清空冒烟用数据与偏好后重新播种示例数据 |
 | `--smoke-light` / `--smoke-dark` | 强制浅色 / 深色主题截图 |
 | `--skip-capture` | 跳过快速捕获窗口阶段（部分自动化桌面不允许同进程开第二个窗口） |
+| `--smoke-interact` | 合成指针/滚轮事件校验白板拖拽、缩放、平移与空间切换（结果写 `.smoke/interact.json`） |
+| `--smoke-views=board` | 只跑指定视图阶段 |
 
 `node scripts/png-brightness.mjs .smoke/*.png` 可读取截图的平均亮度，用于快速判断当前是浅色还是深色渲染。
 
@@ -75,11 +80,12 @@ npm run dist           # 打包 Windows 安装包 (release/TodoTracker-x.y.z-set
 
 SQLite 数据库：`%APPDATA%/todo-tracker/todo.db`
 （ Electron `app.getPath('userData')`，包含 WAL 日志文件）。
-偏好（主题）：`%APPDATA%/todo-tracker/prefs.json`。
+偏好（主题、当前空间）：`%APPDATA%/todo-tracker/prefs.json`。
 窗口位置状态：`%APPDATA%/todo-tracker/window-state.json`。
-界面内可通过侧边栏「数据库位置」按钮直接打开所在目录。
+界面内可通过设置里的「数据库位置」按钮直接打开所在目录。
 
-Schema 版本由 `user_version` 管理，启动时增量迁移（v2 新增 `classified` / `sort_order`），既有数据不丢失。
+Schema 版本由 `user_version` 管理，启动时增量迁移（当前 v5），既有数据不丢失：
+v2 新增 `classified` / `sort_order`，v3–v4 调整白板坐标系，v5 新增 `spaces` 表与 `todos.space_id`（旧任务自动归入「工作」）。
 
 ## 键盘快捷键
 
@@ -91,6 +97,7 @@ Schema 版本由 `user_version` 管理，启动时增量迁移（v2 新增 `clas
 | `Space` | 完成 / 取消完成选中任务 |
 | `Enter` / `E` | 打开选中任务详情 |
 | `1` – `4` | 将选中任务移到对应象限的中心（白板） |
+| `Alt + 1` – `Alt + 9` | 切换到第 N 个空间 |
 | `Delete` | 归档选中任务（可撤销） |
 | `Shift + Delete` | 彻底删除选中任务（可撤销） |
 | `Esc` | 关闭详情 / 清除选择 |
@@ -121,41 +128,44 @@ electron/main/        主进程
   index.ts            应用生命周期、全局快捷键、单实例、冒烟测试
   windows.ts          主窗口（无边框）与快速捕获小窗、窗口状态持久化
   tray.ts             系统托盘
-  db.ts               SQLite 建表/迁移 + 全部 CRUD
-  prefs.ts            本地偏好（主题）读写与原生主题同步
+  db.ts               SQLite 建表/迁移 + 全部 CRUD（含 spaces 表与任务归属）
+  prefs.ts            本地偏好（主题、当前空间）读写与原生主题同步
   ipc.ts              ipcMain.handle 注册（类型化小接口）
 electron/preload/     contextBridge 暴露 window.api / window.capture
   theme.ts            首帧主题快照（避免闪烁）+ 主题变更广播
 src/                  渲染进程 (React)
-  store/todos.ts      Zustand 全局状态（列表、选中、筛选、撤销）
-  lib/visible.ts      各视图列表计算（收件箱/今天/白板/全部）
+  store/todos.ts      Zustand 全局状态（列表、选中、筛选、撤销、当前空间）
+  lib/visible.ts      各视图列表计算（收件箱/今天/白板/全部，按空间硬过滤）
+  lib/space.tsx       空间图标 / 颜色元数据（key 存库，展示层映射）
   components/
-    task/             TaskCard（统一卡片语言）、QuadrantPicker、DuePicker、InlineSteps
+    task/             TaskCard（统一卡片语言）、PriorityPicker（2D）、DuePicker、InlineSteps
     views/            InboxView / TodayView / Whiteboard / AllView
-    detail/           DetailPanel（渐进披露属性行 + 步骤 + 备注 + 更多）
-    layout/           Sidebar / TitleBar
-    theme/            ThemeProvider / ThemeToggle
+    detail/           DetailPanel（渐进披露属性行 + 步骤 + 备注 + 更多 + 空间）
+    layout/           Sidebar / TitleBar / SpaceSwitcher / SettingsDialog
+    theme/            ThemeProvider / ThemeSwitcher
     ui/               shadcn/ui 组件（Radix 原语）
 ```
 
 - 关闭主窗口 = 最小化到托盘；托盘菜单可打开主窗口、快速捕获或退出。
 - 主窗口与捕获窗口职责分离：捕获窗口只做一件事——保存标题到收件箱（命令面板风格）。
 
-## 构建 Windows 可执行文件
+## 构建与打包
 
 ```bash
-npm run dist     # NSIS 安装包
-npm run pack     # 免安装版（release/win-unpacked/TodoTracker.exe，可直接运行）
+npm run build      # 只构建：产物在 app-build/（main / preload / renderer）
+npm run package    # 构建 + 免安装版：forge-dist/todo-tracker-win32-x64/todo-tracker.exe（可直接运行）
+npm run make       # 构建 + Squirrel 安装包：forge-dist/make/squirrel.windows/x64/todo-tracker-<版本> Setup.exe
 ```
 
-产物输出在 `release/`。
-构建前请确保 `node scripts/fetch-native.mjs` 已成功（better-sqlite3 使用
-`electron-v130` 预编译版本，与 Electron 33 匹配）。
+打包走 Electron Forge（`forge.config.js`）：
 
-配置说明（electron-builder.yml）：
-- `npmRebuild: false` —— 不做原生模块源码重建，直接打包预编译的 better_sqlite3.node（经 asarUnpack 解包）。
-- `win.signAndEditExecutable: false` —— 个人本地应用不做代码签名，可避免打包时下载
-  winCodeSign（在无管理员特权的账户下解压其符号链接会失败）。如需签名可改回 `true`。
+- `outDir: forge-dist` —— Forge 输出目录；electron-vite 输出到 `app-build/`，避开 Forge 硬编码忽略根目录 `out/` 的规则。
+- `packagerConfig.asar: true` + `plugin-auto-unpack-natives` —— 原生模块 `better_sqlite3.node` 自动从 asar 解包。
+- `plugin-fuses` —— 关闭 `RunAsNode` / Node CLI 参数、开启 asar 完整性校验（打包期固化，不依赖签名）。
+- 不做代码签名：本地自用应用，Squirrel 安装包首次运行会被 SmartScreen 提示，属正常现象。
+
+构建前请确保 `node scripts/fetch-native.mjs` 已成功（better-sqlite3 使用
+`electron-v130` 预编译版本，与 Electron 33 匹配）。原生模块不做源码重建，无 MSVC 也能打包。
 
 ## 路线图（MVP 之后）
 
