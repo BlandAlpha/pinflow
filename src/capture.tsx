@@ -34,8 +34,8 @@ function CaptureApp() {
   }
 
   return (
-    <div className="h-screen bg-background p-1.5">
-      <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-pop">
+    <div className="h-screen bg-transparent p-7">
+      <div className="flex h-full flex-col overflow-hidden rounded-xl bg-popover shadow-pop">
         <div className="flex flex-1 items-center gap-2.5 px-3">
           <Zap className="h-4 w-4 shrink-0 text-primary" />
           <input
@@ -58,8 +58,8 @@ function CaptureApp() {
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center justify-between border-t border-border px-3 py-1.5 text-2xs text-muted-foreground">
-          <span>保存到收件箱 · 之后再去分类</span>
+        <div className="flex shrink-0 items-center justify-between border-t border-border bg-muted/40 px-3 py-1.5 text-2xs text-muted-foreground">
+          <span>保存到收件箱</span>
           <span>Enter 保存 · Esc 取消</span>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { Menu, Tray, app, nativeImage } from 'electron'
 import { appState } from './state'
-import { showCaptureWindow, showMainWindow } from './windows'
+import { requestNewTask, showCaptureWindow, showMainWindow } from './windows'
 
 function iconPath(): string {
   if (app.isPackaged) return join(process.resourcesPath, 'resources', 'tray.png')
@@ -21,6 +21,10 @@ export function createTray(): Tray {
     {
       label: '打开主窗口',
       click: () => showMainWindow()
+    },
+    {
+      label: '新建任务',
+      click: () => requestNewTask()
     },
     { type: 'separator' },
     {
