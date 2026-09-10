@@ -10,7 +10,7 @@
 1. **Capture first** —— 创建任务只需要一个标题，其余全部可选。
 2. **System organizes** —— 任务进入收件箱后，由白板位置、截止时间、置顶等信号自动推导优先级与归属。
 3. **User corrects if needed** —— 你只需要纠正系统的判断（拖一下、点一下），而不是先填一堆字段。
-4. **白板坐标是唯一面向用户的分类** —— 一块连续的「重要性 × 紧急性」二维空间：上=重要、下=不重要、左=紧急、右=不紧急。重要度/紧急度由坐标自动推导，界面上不暴露重复的独立控件。
+4. **白板坐标是唯一面向用户的分类** —— 一块连续的「重要性 × 紧急性」二维空间（数学坐标）：上=重要、下=不重要、右=紧急、左=不紧急。重要度/紧急度由坐标自动推导，界面上不暴露重复的独立控件。
 5. **渐进式披露** —— 常用操作一步可达，高级信息默认折叠。
 
 ## 四个视图
@@ -22,7 +22,7 @@
 | **白板 Board** | 这件事值不值得做？ | 连续二维画布：任务是便签，按住即可拖动，松手即写库；滚轮以光标为锚点缩放（100%–300%，带补间）、左键拖空白处平移 |
 | **全部 All** | 找某个具体任务 | 更密集的工具化列表：搜索 / 状态 / 截止 / 排序筛选 |
 
-- 未落点任务（`board_x / board_y` 为空）只出现在收件箱；一旦拖动到白板或设定截止/置顶/标签，即视为已归类。
+- 未落点任务（`board_x / board_y` 为空）在收件箱之外也会出现；一旦拖动到白板或设定截止/置顶/标签，即视为已归类、从收件箱移出。
 - 白板坐标即 groundtruth：落点写库，所有视图双向同步，不做展示层避让。
 - 所有拖拽与勾选即时持久化，无确认弹窗。
 
@@ -57,7 +57,7 @@ npm run dev            # 启动开发模式（主进程 + 渲染进程热更新�
 
 ```bash
 npm run typecheck      # TypeScript 类型检查（src + shared + electron + tests）
-npm run test           # 单元测试 (vitest)：优先级评分 + 视图模型 + 白板坐标
+npm run test           # 单元测试 (vitest)：优先级评分 + 视图模型 + 白板坐标 + db
 npm run build          # 构建到 app-build/
 npm run smoke          # 构建 + 自动化冒烟测试（截图输出到 .smoke/）
 npm run package        # 打包免安装版 (forge-dist/todo-tracker-win32-x64/todo-tracker.exe)
@@ -75,6 +75,23 @@ npm run make           # 构建并打包 Squirrel 安装包 (forge-dist/make/squ
 | `--smoke-views=board` | 只跑指定视图阶段 |
 
 `node scripts/png-brightness.mjs .smoke/*.png` 可读取截图的平均亮度，用于快速判断当前是浅色还是深色渲染。
+
+> 冒烟测试代码在 `electron/main/smoke.ts`，由入口动态 import 且**只在未打包时加载**：
+> 它把截图写进 `app.getAppPath()/.smoke`，而打包后该路径位于 asar 内（只读）。
+
+### db 层测试默认跳过
+
+`tests/db.test.ts` 直接跑真实 SQLite，需要 **Node ABI** 的 `better-sqlite3` 原生二进制；
+而开发用的是 Electron ABI（`scripts/fetch-native.mjs` 下载的 electron-v130 版本），
+两者不通用。缺少可用二进制时该组测试自动跳过，`npm test` 不会失败。
+
+需要真正跑起来时，装一个 Node ABI 的预编译产物即可（不要覆盖 `build/Release/better_sqlite3.node`，
+那是 Electron 运行时的依赖）：
+
+```bash
+npx prebuild-install -r node --arch x64 --platform win32 --dir node_modules/better-sqlite3 --target_path /tmp/bs3-node
+```
+然后把产物放到 `node_modules/better-sqlite3/build/Release/` 下运行 `npm test`，跑完还原。
 
 ## 数据库位置
 
