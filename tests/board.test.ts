@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  avoidOverlap,
   importanceAt,
   levelsAt,
   packFreeSpots,
@@ -52,11 +51,6 @@ describe('白板坐标系', () => {
       expect(p.y).toBeGreaterThanOrEqual(0)
       expect(p.y).toBeLessThanOrEqual(1)
     }
-  })
-
-  it('避让：重叠的落点会被推开', () => {
-    const moved = avoidOverlap({ x: 0.5, y: 0.5 }, [{ x: 0.5, y: 0.5 }])
-    expect(moved.x === 0.5 && moved.y === 0.5).toBe(false)
   })
 })
 

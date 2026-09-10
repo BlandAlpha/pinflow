@@ -125,6 +125,12 @@ export interface UpdateTodoInput extends Partial<CreateTodoInput> {
   archived?: never
   /** 移动任务到另一个空间 */
   spaceId?: string
+  /**
+   * 静默更新：不刷新 updated_at。
+   * 白板拖动属于「摆放」而非编辑，若每次都刷新 updated_at，
+   * 「按更新时间排序」就会退化成「按最后一次拖动排序」。
+   */
+  silent?: boolean
 }
 
 /** 主题模式 */

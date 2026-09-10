@@ -76,3 +76,24 @@ export const QUADRANT_META: Record<Quadrant, QuadrantMeta> = {
 }
 
 export const QUADRANTS: Quadrant[] = [1, 2, 3, 4]
+
+/**
+ * 截止时间 -> 重要度/紧急度：剩余越少越重要越紧急。
+ * 档位以 6 小时为最小步长；主进程启动时与每 6 小时按此重算一次。
+ */
+export function levelsFromDue(
+  dueAt: string,
+  now: number = Date.now()
+): { importance: Level; urgency: Level } {
+  const hours = (new Date(dueAt).getTime() - now) / 3_600_000
+  // 6 小时内到期（含已逾期）：现在就做
+  if (hours <= 6) return { importance: 'high', urgency: 'high' }
+  // 一天内：重要，尽早安排
+  if (hours <= 24) return { importance: 'high', urgency: 'normal' }
+  // 三天内：正常推进
+  if (hours <= 72) return { importance: 'normal', urgency: 'normal' }
+  // 一周内：先不抢注意力
+  if (hours <= 168) return { importance: 'normal', urgency: 'low' }
+  // 还远
+  return { importance: 'low', urgency: 'low' }
+}

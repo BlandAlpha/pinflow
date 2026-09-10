@@ -41,8 +41,6 @@ interface BoardSize {
   vh: number
 }
 
-/** 缩放范围：最小 1 —— 画布永远不小于可视区，不会缩出空白 */
-const MIN_ZOOM = 1
 const MAX_ZOOM = 3
 
 const CORNER_LABELS: { className: string; text: string }[] = [
@@ -56,9 +54,17 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v))
 }
 
+/**
+ * 让整块画布刚好铺满可视区的倍率（<= 1）。
+ * 画布固定 1240×800，窄窗口下必须能缩到 fit，否则右半边永远看不到。
+ */
+function fitZoom(size: BoardSize): number {
+  return Math.min(size.vw / size.w, size.vh / size.h)
+}
+
 /** 把视口夹在合法范围内：画布永远铺满可视区，拖不出边界 */
 function clampViewport(v: Viewport, size: BoardSize): Viewport {
-  const zoom = clamp(v.zoom, MIN_ZOOM, MAX_ZOOM)
+  const zoom = clamp(v.zoom, fitZoom(size), MAX_ZOOM)
   const minX = Math.min(0, size.vw - size.w * zoom)
   const minY = Math.min(0, size.vh - size.h * zoom)
   return {
@@ -78,7 +84,8 @@ export function Whiteboard() {
   const select = useTodos((s) => s.select)
   const selectedId = useTodos((s) => s.selectedId)
   const toggle = useTodos((s) => s.toggle)
-  const setPosition = useTodos((s) => s.setPosition)
+  const setPositionLazy = useTodos((s) => s.setPositionLazy)
+  const setPositions = useTodos((s) => s.setPositions)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<BoardSize>({ w: BOARD_W, h: BOARD_H, vw: BOARD_W, vh: BOARD_H })
@@ -176,7 +183,7 @@ export function Whiteboard() {
   const zoomAt = useCallback(
     (nextZoom: number, mx: number, my: number) => {
       const base = targetRef.current
-      const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM)
+      const zoom = clamp(nextZoom, fitZoom(sizeRef.current), MAX_ZOOM)
       const ratio = zoom / base.zoom
       applySmooth({
         zoom,
@@ -269,7 +276,8 @@ export function Whiteboard() {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
-      if (moved) void setPosition(p.todo.id, clamp01(latest.x), clamp01(latest.y))
+      // 放下时本地立即停靠（不闪烁），1 秒后才写库，减少读写压力
+      if (moved) setPositionLazy(p.todo.id, clamp01(latest.x), clamp01(latest.y))
       else select(p.todo.id)
       setDraft(null)
     }
@@ -310,11 +318,8 @@ export function Whiteboard() {
       { x: 0.5, y: 0.52 },
       loose.map((p) => p.todo.id).join('|')
     )
-    for (let i = 0; i < loose.length; i++) {
-      // 顺序执行，避免并发写同一连接
-      // eslint-disable-next-line no-await-in-loop
-      await setPosition(loose[i].todo.id, spots[i].x, spots[i].y)
-    }
+    // 一次 IPC、一个事务：N 张卡片不再是 N 次往返
+    await setPositions(loose.map((p, i) => ({ id: p.todo.id, x: spots[i].x, y: spots[i].y })))
   }
 
   const unplacedCount = placed.filter((p) => p.auto).length
@@ -345,7 +350,7 @@ export function Whiteboard() {
             variant="ghost"
             size="icon-sm"
             className="h-6 w-6 text-muted-foreground"
-            disabled={vp.zoom <= MIN_ZOOM + 0.001}
+            disabled={vp.zoom <= fitZoom(size) + 0.001}
             onClick={() => zoomByStep(1 / 1.25)}
             title="缩小"
           >
@@ -399,6 +404,19 @@ export function Whiteboard() {
             transform: `translate3d(${vp.x}px, ${vp.y}px, 0) scale(${vp.zoom})`
           }}
         >
+          {/* 四角象限色：与 2D 选择器同款配色，更浅（0.10 / 0.08），
+              只作方位暗示，不干扰卡片 */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: [
+                'radial-gradient(46% 46% at 0% 0%, hsl(var(--q2) / 0.10) 0%, transparent 70%)',
+                'radial-gradient(46% 46% at 100% 0%, hsl(var(--q1) / 0.10) 0%, transparent 70%)',
+                'radial-gradient(46% 46% at 0% 100%, hsl(var(--q4) / 0.08) 0%, transparent 70%)',
+                'radial-gradient(46% 46% at 100% 100%, hsl(var(--q3) / 0.08) 0%, transparent 70%)'
+              ].join(', ')
+            }}
+          />
           {/* 网格 */}
           <div
             className="pointer-events-none absolute inset-0"
@@ -424,17 +442,18 @@ export function Whiteboard() {
               {c.text}
             </span>
           ))}
-          <span className="pointer-events-none absolute left-1/2 top-1.5 -translate-x-1/2 select-none text-2xs tracking-wide text-muted-foreground/30">
-            更重要 ↑
+          {/* 轴标签：留在屏幕边缘，紧贴各自轴线（竖轴右侧 / 横轴上方） */}
+          <span className="pointer-events-none absolute left-1/2 top-1 ml-1.5 select-none text-2xs tracking-wide text-muted-foreground/30">
+            重要
           </span>
-          <span className="pointer-events-none absolute bottom-1.5 left-1/2 -translate-x-1/2 select-none text-2xs tracking-wide text-muted-foreground/30">
-            较不重要 ↓
+          <span className="pointer-events-none absolute bottom-1 left-1/2 ml-1.5 select-none text-2xs tracking-wide text-muted-foreground/30">
+            不重要
           </span>
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 select-none text-2xs tracking-wide text-muted-foreground/30">
-            更紧急 →
+          <span className="pointer-events-none absolute right-2 top-[calc(50%-2px)] -translate-y-full select-none text-2xs tracking-wide text-muted-foreground/30">
+            紧急
           </span>
-          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 select-none text-2xs tracking-wide text-muted-foreground/30">
-            ← 不紧急
+          <span className="pointer-events-none absolute left-2 top-[calc(50%-2px)] -translate-y-full select-none text-2xs tracking-wide text-muted-foreground/30">
+            不紧急
           </span>
 
           {placed.length === 0 && (

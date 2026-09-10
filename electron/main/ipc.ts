@@ -29,13 +29,17 @@ import {
   closeMainWindow,
   hideCaptureWindow,
   minimizeMainWindow,
-  showMainWindow,
   toggleMaximizeMainWindow
 } from './windows'
 
-/** 数据变更广播：通知所有窗口刷新 */
-export function broadcastDataChanged(): void {
+/**
+ * 数据变更广播：通知所有窗口刷新。
+ * 传入 originId（invoke 事件的 sender.id）时会跳过来源窗口 —— 它自己在
+ * await 完 IPC 之后已经 refresh 过一次，没必要再全量拉一遍。
+ */
+export function broadcastDataChanged(originId?: number): void {
   for (const win of BrowserWindow.getAllWindows()) {
+    if (originId !== undefined && win.webContents.id === originId) continue
     win.webContents.send(IPC.DATA_CHANGED)
   }
 }
@@ -54,53 +58,66 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.TODOS_CREATE, (_e, input: CreateTodoInput): Todo => {
     const todo = db.createTodo(input)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return todo
   })
 
   ipcMain.handle(IPC.TODOS_UPDATE, (_e, input: UpdateTodoInput): Todo => {
     const todo = db.updateTodo(input)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return todo
   })
 
   ipcMain.handle(IPC.TODOS_DELETE, (_e, id: string): boolean => {
     const ok = db.deleteTodo(id)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return ok
   })
 
   ipcMain.handle(IPC.TODOS_TOGGLE, (_e, id: string): Todo => {
     const todo = db.toggleTodo(id)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return todo
   })
   ipcMain.handle(IPC.TODOS_SET_QUADRANT, (_e, id: string, q: Quadrant): Todo => {
     const todo = db.setQuadrant(id, q)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return todo
   })
   ipcMain.handle(
     IPC.TODOS_SET_POSITION,
     (_e, id: string, x: number, y: number): Todo => {
       const todo = db.setBoardPosition(id, x, y)
-      broadcastDataChanged()
+      broadcastDataChanged(_e.sender.id)
       return todo
     }
   )
+  ipcMain.handle(
+    IPC.TODOS_SET_POSITIONS,
+    (_e, items: { id: string; x: number; y: number }[]): Todo[] => {
+      const todos = db.setBoardPositions(items)
+      broadcastDataChanged(_e.sender.id)
+      return todos
+    }
+  )
+  ipcMain.handle(IPC.TODOS_RESTORE, (_e, todo: Todo): Todo => {
+    const restored = db.restoreTodo(todo)
+    broadcastDataChanged(_e.sender.id)
+    return restored
+  })
   ipcMain.handle(IPC.TODOS_REORDER, (_e, orderedIds: string[]): Todo[] => {
     const todos = db.reorderTodos(orderedIds)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return todos
   })
   ipcMain.handle(IPC.TODOS_ADD_TAG, (_e, id: string, tag: string): Todo => {
     const todo = db.addTag(id, tag)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return todo
   })
   ipcMain.handle(IPC.TODOS_REMOVE_TAG, (_e, id: string, tag: string): Todo => {
     const todo = db.removeTag(id, tag)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return todo
   })
   ipcMain.handle(IPC.TODOS_ALL_TAGS, (_e, spaceId?: string | null): string[] =>
@@ -111,12 +128,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SPACES_LIST, () => db.listSpaces())
   ipcMain.handle(IPC.SPACES_CREATE, (_e, input: CreateSpaceInput) => {
     const space = db.createSpace(input)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return space
   })
   ipcMain.handle(IPC.SPACES_UPDATE, (_e, id: string, patch: UpdateSpaceInput) => {
     const space = db.updateSpace(id, patch)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return space
   })
   ipcMain.handle(IPC.SPACES_DELETE, (_e, id: string, moveToId?: string) => {
@@ -124,7 +141,7 @@ export function registerIpcHandlers(): void {
     if (res.removed) {
       // 删掉的正是当前空间时，把偏好指向接手任务的空间
       if (getPrefs().activeSpaceId === id) setActiveSpace(res.movedTo)
-      broadcastDataChanged()
+      broadcastDataChanged(_e.sender.id)
     }
     return res
   })
@@ -132,41 +149,46 @@ export function registerIpcHandlers(): void {
   /* ---------- Steps ---------- */
   ipcMain.handle(IPC.STEPS_ADD, (_e, todoId: string, title: string): Step => {
     const step = db.addStep(todoId, title)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return step
   })
   ipcMain.handle(
     IPC.STEPS_UPDATE,
     (_e, stepId: string, patch: Partial<Pick<Step, 'title' | 'completed'>>): Step => {
       const step = db.updateStep(stepId, patch)
-      broadcastDataChanged()
+      broadcastDataChanged(_e.sender.id)
       return step
     }
   )
   ipcMain.handle(IPC.STEPS_DELETE, (_e, stepId: string): boolean => {
     const ok = db.deleteStep(stepId)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return ok
   })
   ipcMain.handle(IPC.STEPS_TOGGLE, (_e, stepId: string): Step => {
     const step = db.toggleStep(stepId)
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
     return step
   })
-  ipcMain.handle(
-    IPC.STEPS_REORDER,
-    (_e, todoId: string, ordered: string[]): Step[] => db.reorderSteps(todoId, ordered)
-  )
-
   /* ---------- App ---------- */
   ipcMain.handle(IPC.APP_DB_PATH, (): string => db.getDbPath())
   ipcMain.handle(IPC.APP_OPEN_DB_DIR, (): void => {
     void shell.showItemInFolder(db.getDbPath())
   })
   ipcMain.handle(IPC.APP_QUIT, (): void => app.quit())
-  ipcMain.handle(IPC.APP_SHOW_MAIN, (): void => showMainWindow())
-  ipcMain.handle(IPC.APP_HIDE_MAIN, (): void => minimizeMainWindow())
   ipcMain.handle(IPC.APP_WIN_MIN, (): void => minimizeMainWindow())
+  ipcMain.handle(IPC.APP_GET_VERSION, (): string => app.getVersion())
+  // 只放行 https 链接：渲染进程不可用来拉起 file:// 或自定义协议
+  ipcMain.handle(IPC.APP_OPEN_EXTERNAL, (_e, url: string): void => {
+    if (typeof url === 'string' && /^https:\/\//.test(url)) void shell.openExternal(url)
+  })
+
+  ipcMain.handle(IPC.DATA_CLEAR_ALL, (_e): void => {
+    db.clearAllData()
+    // 偏好里记住的空间已被重置掉，退回默认
+    setActiveSpace(null)
+    broadcastDataChanged(_e.sender.id)
+  })
   ipcMain.handle(IPC.APP_WIN_MAX, (): void => toggleMaximizeMainWindow())
   ipcMain.handle(IPC.APP_WIN_CLOSE, (): void => closeMainWindow())
   ipcMain.handle(IPC.APP_GET_AUTO_LAUNCH, (): boolean => {
@@ -199,7 +221,7 @@ export function registerIpcHandlers(): void {
     const trimmed = (title ?? '').trim()
     if (!trimmed) return
     db.createTodo({ title: trimmed })
-    broadcastDataChanged()
+    broadcastDataChanged(_e.sender.id)
   })
   ipcMain.handle(IPC.CAPTURE_CLOSE, (): void => {
     hideCaptureWindow()

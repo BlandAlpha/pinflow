@@ -16,7 +16,7 @@ import type {
   UpdateTodoInput
 } from '@shared/types'
 import { SPACE_COLORS, SPACE_ICONS } from '@shared/types'
-import { quadrantToLevels } from '@shared/quadrant'
+import { levelsFromDue, levelsToQuadrant, quadrantToLevels } from '@shared/quadrant'
 import { positionForQuadrant, levelsAt } from '@shared/board'
 import { getPrefs } from './prefs'
 
@@ -86,9 +86,20 @@ function instance(): Database.Database {
   return db
 }
 
-/** 自动建表 / 迁移 */
+/**
+ * 自动建表 / 迁移。
+ * 整段放在一个事务里：中途出错时不会留下「DDL 已执行、版本号没涨」的半成品库。
+ */
 function migrate(d: Database.Database): void {
   const current = d.pragma('user_version', { simple: true }) as number
+  if (current >= SCHEMA_VERSION) return
+  d.transaction(() => {
+    migrateSteps(d, current)
+    d.pragma(`user_version = ${SCHEMA_VERSION}`)
+  })()
+}
+
+function migrateSteps(d: Database.Database, current: number): void {
   if (current < 1) {
     d.exec(`
       CREATE TABLE IF NOT EXISTS todos (
@@ -207,7 +218,6 @@ function migrate(d: Database.Database): void {
     )
     d.exec('CREATE INDEX IF NOT EXISTS idx_todos_space ON todos(space_id)')
   }
-  d.pragma(`user_version = ${SCHEMA_VERSION}`)
 }
 
 /** 第一个空间（按排序），作为兜底归属 */
@@ -366,16 +376,21 @@ export function createTodo(input: CreateTodoInput): Todo {
   const ts = nowIso()
   const id = randomUUID()
   const min = d.prepare('SELECT COALESCE(MIN(sort_order), 0) AS m FROM todos').get() as { m: number }
+  // 带截止时间的任务：等级按剩余时间推导，并直接落到对应象限坐标
+  const derived = input.dueAt ? levelsFromDue(input.dueAt) : null
+  const start = derived
+    ? positionForQuadrant(levelsToQuadrant(derived.importance, derived.urgency))
+    : null
   d.prepare(
-    `INSERT INTO todos (id, space_id, title, notes, importance, urgency, due_at, status, created_at, updated_at, completed_at, tags, pinned, classified, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO todos (id, space_id, title, notes, importance, urgency, due_at, status, created_at, updated_at, completed_at, tags, pinned, classified, sort_order, board_x, board_y)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     resolveSpaceId(d, input.spaceId),
     input.title.trim(),
     input.notes ?? '',
-    input.importance ?? 'normal',
-    input.urgency ?? 'normal',
+    derived?.importance ?? (input.importance ?? 'normal'),
+    derived?.urgency ?? (input.urgency ?? 'normal'),
     input.dueAt ?? null,
     input.status ?? 'active',
     ts,
@@ -383,9 +398,11 @@ export function createTodo(input: CreateTodoInput): Todo {
     null,
     JSON.stringify(input.tags ?? []),
     input.pinned ? 1 : 0,
-    input.classified ? 1 : 0,
+    input.classified || derived ? 1 : 0,
     // 新任务排在最前
-    Math.min(0, min.m) - 1
+    Math.min(0, min.m) - 1,
+    start?.x ?? null,
+    start?.y ?? null
   )
   return getTodo(id)
 }
@@ -410,6 +427,16 @@ export function updateTodo(input: UpdateTodoInput): Todo {
   if (input.pinned !== undefined) push('pinned', input.pinned ? 1 : 0)
   if (input.boardX !== undefined) push('board_x', input.boardX)
   if (input.boardY !== undefined) push('board_y', input.boardY)
+  // 带截止时间的任务：未显式指定等级时按剩余时间推导（与 6 小时巡检同口径），
+  // 并同步象限坐标 —— 坐标是面向用户的分类基准，只改等级会两边打架
+  if (input.dueAt && input.importance === undefined && input.urgency === undefined) {
+    const derived = levelsFromDue(input.dueAt)
+    push('importance', derived.importance)
+    push('urgency', derived.urgency)
+    const p = positionForQuadrant(levelsToQuadrant(derived.importance, derived.urgency))
+    push('board_x', p.x)
+    push('board_y', p.y)
+  }
   // 任何一次明确的属性编辑（象限/截止/置顶/标签）都视为「已分类」，任务随之离开收件箱
   const impliesClassified =
     input.importance !== undefined ||
@@ -425,7 +452,7 @@ export function updateTodo(input: UpdateTodoInput): Todo {
   }
   if (sets.length === 0) return getTodo(input.id)
 
-  push('updated_at', nowIso())
+  if (!input.silent) push('updated_at', nowIso())
   values.push(input.id)
   d.prepare(`UPDATE todos SET ${sets.join(', ')} WHERE id = ?`).run(...values)
   return getTodo(input.id)
@@ -435,6 +462,72 @@ export function deleteTodo(id: string): boolean {
   const d = instance()
   const res = d.prepare('DELETE FROM todos WHERE id = ?').run(id)
   return res.changes > 0
+}
+
+/**
+ * 清除全部数据：任务与步骤全删，空间重置为出厂默认。
+ * 不可撤销，唯一的调用方是设置里的红色「清除所有数据」（带二次确认）。
+ */
+export function clearAllData(): void {
+  const d = instance()
+  d.transaction(() => {
+    d.prepare('DELETE FROM steps').run()
+    d.prepare('DELETE FROM todos').run()
+    d.prepare('DELETE FROM spaces').run()
+    const ins = d.prepare(
+      'INSERT INTO spaces (id, name, icon, color, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    const ts = nowIso()
+    DEFAULT_SPACES.forEach((s, i) => ins.run(s.id, s.name, s.icon, s.color, i, ts))
+  })()
+}
+
+/**
+ * 已完成 / 已归档任务保留 30 天后自动清除（步骤随外键级联删除）。
+ * 以 completed_at 为准；从活跃任务直接归档的没有 completed_at，退回 updated_at。
+ * @returns 清除的任务数
+ */
+export function purgeExpiredArchived(maxAgeDays = 30): number {
+  const d = instance()
+  const cutoff = new Date(Date.now() - maxAgeDays * 24 * 3600 * 1000).toISOString()
+  const res = d
+    .prepare(
+      `DELETE FROM todos
+       WHERE status <> 'active' AND COALESCE(completed_at, updated_at) < ?`
+    )
+    .run(cutoff)
+  return res.changes
+}
+
+/**
+ * 截止时间驱动的等级刷新：按剩余时间重算重要度/紧急度并同步象限坐标。
+ * 主进程启动时与每 6 小时调用一次（口径见 shared 的 levelsFromDue）。
+ * @returns 发生变化的任务数
+ */
+export function refreshDueLevels(now = Date.now()): number {
+  const d = instance()
+  const rows = d
+    .prepare(
+      `SELECT id, due_at, importance, urgency FROM todos
+       WHERE status = 'active' AND due_at IS NOT NULL`
+    )
+    .all() as { id: string; due_at: string; importance: string; urgency: string }[]
+  const upd = d.prepare(
+    'UPDATE todos SET importance = ?, urgency = ?, board_x = ?, board_y = ? WHERE id = ?'
+  )
+  let changed = 0
+  d.transaction(() => {
+    for (const r of rows) {
+      const levels = levelsFromDue(r.due_at, now)
+      if (levels.importance === toLevel(r.importance) && levels.urgency === toLevel(r.urgency)) {
+        continue
+      }
+      const p = positionForQuadrant(levelsToQuadrant(levels.importance, levels.urgency))
+      upd.run(levels.importance, levels.urgency, p.x, p.y, r.id)
+      changed++
+    }
+  })()
+  return changed
 }
 
 export function toggleTodo(id: string): Todo {
@@ -449,12 +542,77 @@ export function setQuadrant(id: string, quadrant: Quadrant): Todo {
   return updateTodo({ id, importance, urgency, classified: true, boardX: p.x, boardY: p.y })
 }
 
-/** 白板拖拽：写入坐标，并按坐标推导内部重要度/紧急度 */
+/** 白板拖拽：写入坐标，并按坐标推导内部重要度/紧急度（不刷新 updated_at） */
 export function setBoardPosition(id: string, x: number, y: number): Todo {
   const cx = Math.min(1, Math.max(0, x))
   const cy = Math.min(1, Math.max(0, y))
   const levels = levelsAt({ x: cx, y: cy })
-  return updateTodo({ id, boardX: cx, boardY: cy, ...levels, classified: true })
+  return updateTodo({ id, boardX: cx, boardY: cy, ...levels, classified: true, silent: true })
+}
+
+/**
+ * 批量写入白板坐标（白板「整理」用）。
+ * 与逐条 setBoardPosition 效果一致，但只跑一个事务，避免 N 次 IPC + N 次广播。
+ */
+export function setBoardPositions(items: { id: string; x: number; y: number }[]): Todo[] {
+  const d = instance()
+  const upd = d.prepare(
+    `UPDATE todos
+     SET board_x = ?, board_y = ?, importance = ?, urgency = ?, classified = 1
+     WHERE id = ?`
+  )
+  const tx = d.transaction((list: { id: string; x: number; y: number }[]) => {
+    for (const it of list) {
+      const cx = Math.min(1, Math.max(0, it.x))
+      const cy = Math.min(1, Math.max(0, it.y))
+      const levels = levelsAt({ x: cx, y: cy })
+      upd.run(cx, cy, levels.importance, levels.urgency, it.id)
+    }
+  })
+  tx(items)
+  return listTodos()
+}
+
+/**
+ * 撤销删除：整行原样恢复（原 id、创建时间、状态、坐标与步骤都保留）。
+ * 不能用 createTodo 重新插一条 —— 那会丢掉 createdAt / status / completedAt / order。
+ */
+export function restoreTodo(todo: Todo): Todo {
+  const d = instance()
+  const tx = d.transaction((t: Todo) => {
+    // 先清掉可能残留的步骤，避免与下面重插冲突
+    d.prepare('DELETE FROM steps WHERE todo_id = ?').run(t.id)
+    d.prepare(
+      `INSERT OR REPLACE INTO todos
+       (id, space_id, title, notes, importance, urgency, due_at, status,
+        created_at, updated_at, completed_at, tags, pinned, classified, sort_order, board_x, board_y)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      t.id,
+      resolveSpaceId(d, t.spaceId),
+      t.title,
+      t.notes,
+      t.importance,
+      t.urgency,
+      t.dueAt,
+      t.status,
+      t.createdAt,
+      t.updatedAt,
+      t.completedAt,
+      JSON.stringify(t.tags ?? []),
+      t.pinned ? 1 : 0,
+      t.classified ? 1 : 0,
+      t.order ?? 0,
+      t.boardX ?? null,
+      t.boardY ?? null
+    )
+    const ins = d.prepare(
+      'INSERT INTO steps (id, todo_id, title, completed, sort_order) VALUES (?, ?, ?, ?, ?)'
+    )
+    t.steps.forEach((s, i) => ins.run(s.id, t.id, s.title, s.completed ? 1 : 0, s.order ?? i))
+  })
+  tx(todo)
+  return getTodo(todo.id)
 }
 
 /** 在同一象限内重排：orderedIds 为期望顺序 */
@@ -622,21 +780,4 @@ export function deleteStep(stepId: string): boolean {
   return res.changes > 0
 }
 
-export function reorderSteps(todoId: string, orderedStepIds: string[]): Step[] {
-  const d = instance()
-  const tx = d.transaction((ids: string[]) => {
-    ids.forEach((id, index) => {
-      d.prepare('UPDATE steps SET sort_order = ? WHERE id = ? AND todo_id = ?').run(
-        index,
-        id,
-        todoId
-      )
-    })
-  })
-  tx(orderedStepIds)
-  return (
-    d
-      .prepare('SELECT * FROM steps WHERE todo_id = ? ORDER BY sort_order ASC')
-      .all(todoId) as StepRow[]
-  ).map(mapStep)
-}
+

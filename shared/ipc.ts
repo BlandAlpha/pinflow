@@ -21,6 +21,10 @@ export const IPC = {
   TODOS_TOGGLE: 'todos:toggle',
   TODOS_SET_QUADRANT: 'todos:setQuadrant',
   TODOS_SET_POSITION: 'todos:setPosition',
+  /** 批量写入白板坐标（「整理」用）：一个事务写完，只广播一次 */
+  TODOS_SET_POSITIONS: 'todos:setPositions',
+  /** 撤销删除：整行原样恢复（含原 id / 创建时间 / 状态 / 步骤） */
+  TODOS_RESTORE: 'todos:restore',
   TODOS_REORDER: 'todos:reorder',
   TODOS_ADD_TAG: 'todos:addTag',
   TODOS_REMOVE_TAG: 'todos:removeTag',
@@ -35,14 +39,13 @@ export const IPC = {
   STEPS_UPDATE: 'steps:update',
   STEPS_DELETE: 'steps:delete',
   STEPS_TOGGLE: 'steps:toggle',
-  STEPS_REORDER: 'steps:reorder',
 
   APP_DB_PATH: 'app:dbPath',
   APP_OPEN_DB_DIR: 'app:openDbDir',
   APP_QUIT: 'app:quit',
-  APP_SHOW_MAIN: 'app:showMain',
-  APP_HIDE_MAIN: 'app:hideMain',
   APP_WIN_MIN: 'app:winMin',
+  APP_GET_VERSION: 'app:version',
+  APP_OPEN_EXTERNAL: 'app:openExternal',
   APP_WIN_MAX: 'app:winMax',
   APP_WIN_CLOSE: 'app:winClose',
   APP_SET_AUTO_LAUNCH: 'app:setAutoLaunch',
@@ -53,9 +56,10 @@ export const IPC = {
 
   CAPTURE_CLOSE: 'capture:close',
   CAPTURE_SUBMIT: 'capture:submit',
-  CAPTURE_SAVED: 'capture:saved',
   /** 主进程 -> 渲染进程：数据发生变更，需要刷新 */
   DATA_CHANGED: 'data:changed',
+  /** 设置里的「清除所有数据」：任务/步骤全删，空间重置为默认 */
+  DATA_CLEAR_ALL: 'data:clearAll',
   /** 主进程 -> 渲染进程：请求打开新建任务输入框 */
   REQUEST_NEW_TASK: 'app:newTask',
   /** 主进程 -> 渲染进程：快速捕获窗口准备就绪 */
@@ -71,6 +75,10 @@ export interface TodoApi {
   toggleTodo(id: string): Promise<Todo>
   setQuadrant(id: string, quadrant: Quadrant): Promise<Todo>
   setPosition(id: string, x: number, y: number): Promise<Todo>
+  /** 批量写入白板坐标，返回变更后的完整列表 */
+  setPositions(items: { id: string; x: number; y: number }[]): Promise<Todo[]>
+  /** 撤销删除：整行原样恢复，返回恢复后的任务 */
+  restoreTodo(todo: Todo): Promise<Todo>
   reorderTodos(orderedIds: string[]): Promise<Todo[]>
   addTag(id: string, tag: string): Promise<Todo>
   removeTag(id: string, tag: string): Promise<Todo>
@@ -81,15 +89,20 @@ export interface TodoApi {
   createSpace(input: CreateSpaceInput): Promise<Space>
   updateSpace(id: string, patch: UpdateSpaceInput): Promise<Space>
   deleteSpace(id: string, moveToId?: string): Promise<SpaceDeleteResult>
+  /** 清除全部数据并重置空间（设置里的危险区，需二次确认） */
+  clearAllData(): Promise<void>
 
   addStep(todoId: string, title: string): Promise<Step>
   updateStep(stepId: string, patch: Partial<Pick<Step, 'title' | 'completed'>>): Promise<Step>
   deleteStep(stepId: string): Promise<boolean>
   toggleStep(stepId: string): Promise<Step>
-  reorderSteps(todoId: string, orderedStepIds: string[]): Promise<Step[]>
 
   dbPath(): Promise<string>
   openDbDir(): Promise<void>
+  /** 应用版本号（设置里的 info 区展示） */
+  getVersion(): Promise<string>
+  /** 打开外部链接（仅放行 https，防止渲染进程被用来拉起任意协议） */
+  openExternal(url: string): Promise<void>
   quitApp(): Promise<void>
   minimizeWindow(): Promise<void>
   toggleMaximizeWindow(): Promise<void>

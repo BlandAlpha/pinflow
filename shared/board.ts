@@ -144,31 +144,3 @@ export function packFreeSpots(occupied: BoardPoint[], count: number, anchor: Boa
   return spots
 }
 
-/** 落点与其它卡片重叠时做轻微避让（保留自由摆放感，只推开一点点） */
-export function avoidOverlap(
-  p: BoardPoint,
-  others: BoardPoint[],
-  selfIndex = -1
-): BoardPoint {
-  const minX = (CARD_W + 10) / BOARD_W
-  const minY = (CARD_H + 8) / BOARD_H
-  let cur = clampPoint(p)
-  for (let i = 0; i < others.length; i++) {
-    if (i === selfIndex) continue
-    const o = others[i]
-    let guard = 0
-    while (Math.abs(o.x - cur.x) < minX && Math.abs(o.y - cur.y) < minY && guard < 8) {
-      const candidateA = { x: cur.x + minX * 0.9, y: cur.y }
-      const candidateB = { x: cur.x, y: cur.y + minY * 0.9 }
-      const next =
-        candidateA.x <= 0.97 && Math.abs(o.y - candidateA.y) >= minY
-          ? candidateA
-          : candidateB.y <= 0.97
-            ? candidateB
-            : { x: cur.x - minX * 0.9, y: cur.y - minY * 0.6 }
-      cur = clampPoint(next)
-      guard++
-    }
-  }
-  return cur
-}
