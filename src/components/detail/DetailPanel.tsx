@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Archive, ChevronDown, MoreHorizontal, Plus, Tag, Trash2, X } from 'lucide-react'
+import { Archive, Check, ChevronDown, MoreHorizontal, Plus, Tag, Trash2, X } from 'lucide-react'
 import { pointOf, quadrantAt } from '@shared/board'
 import { QUADRANT_META } from '@shared/quadrant'
 import { explainPriority } from '@shared/priority'
 import { useTodos } from '@/store/todos'
 import { cn } from '@/lib/utils'
 import { dueTone, formatDue } from '@/lib/date'
+import { SpaceGlyph } from '@/lib/space'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -38,6 +39,7 @@ export function DetailPanel() {
   const toggleStep = useTodos((s) => s.toggleStep)
   const updateStep = useTodos((s) => s.updateStep)
   const deleteStep = useTodos((s) => s.deleteStep)
+  const spaces = useTodos((s) => s.spaces)
 
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
@@ -58,6 +60,7 @@ export function DetailPanel() {
 
   const point = pointOf(todo)
   const zone = QUADRANT_META[quadrantAt(point ?? { x: 0.5, y: 0.62 })]
+  const space = spaces.find((s) => s.id === todo.spaceId)
   const score = explainPriority(todo)
   const done = todo.steps.filter((s) => s.completed).length
   const tone = dueTone(todo)
@@ -145,6 +148,35 @@ export function DetailPanel() {
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: zone.dotVar }} />
               {point ? zone.title : '待归类'}
             </span>
+
+            {/* 归属空间：直接改数据，视图会立刻跟着变 */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[12px] transition-colors hover:bg-accent"
+                  title="移动到其它空间"
+                >
+                  {space ? (
+                    <SpaceGlyph icon={space.icon} color={space.color} className="h-3 w-3" />
+                  ) : null}
+                  {space?.name ?? '未归属'}
+                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {spaces.map((s) => (
+                  <DropdownMenuItem
+                    key={s.id}
+                    onSelect={() => void update({ id: todo.id, spaceId: s.id })}
+                    className="flex items-center gap-2 text-[12px]"
+                  >
+                    <SpaceGlyph icon={s.icon} color={s.color} className="h-3.5 w-3.5" />
+                    <span className="flex-1">{s.name}</span>
+                    {s.id === todo.spaceId && <Check className="h-3.5 w-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {todo.tags.map((t) => (
               <span

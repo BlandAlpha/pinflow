@@ -2,13 +2,16 @@ import { create } from 'zustand'
 import { EMPTY_FILTER } from '@shared/types'
 import type { TodoApi } from '@shared/ipc'
 import type {
+  CreateSpaceInput,
   CreateTodoInput,
   Level,
   Quadrant,
+  Space,
   Step,
   Todo,
   TodoFilter,
   TodoStatus,
+  UpdateSpaceInput,
   UpdateTodoInput,
   ViewKey
 } from '@shared/types'
@@ -21,6 +24,9 @@ export interface UndoAction {
 interface TodosStore {
   todos: Todo[]
   tags: string[]
+  spaces: Space[]
+  /** 当前空间（所有视图都只在其中工作） */
+  activeSpaceId: string | null
   loading: boolean
   initialized: boolean
   view: ViewKey
@@ -33,6 +39,12 @@ interface TodosStore {
   setFilter: (patch: Partial<TodoFilter>) => void
   refresh: () => Promise<void>
   init: () => Promise<void>
+
+  /** 切换空间（会持久化到偏好，快速捕获窗口也跟着走） */
+  setActiveSpace: (id: string) => Promise<void>
+  createSpace: (input: CreateSpaceInput) => Promise<void>
+  updateSpace: (id: string, patch: UpdateSpaceInput) => Promise<void>
+  deleteSpace: (id: string) => Promise<void>
 
   create: (input: CreateTodoInput) => Promise<Todo>
   update: (input: UpdateTodoInput) => Promise<Todo>
@@ -63,6 +75,8 @@ const api = (): TodoApi => window.api
 export const useTodos = create<TodosStore>((set, get) => ({
   todos: [],
   tags: [],
+  spaces: [],
+  activeSpaceId: null,
   loading: true,
   initialized: false,
   view: 'inbox',
@@ -75,6 +89,14 @@ export const useTodos = create<TodosStore>((set, get) => ({
   setFilter: (patch) => set((s) => ({ filter: { ...s.filter, ...patch } })),
 
   init: async () => {
+    // 先定下空间，再拉数据：标签等派生数据才不会对不上
+    const [prefs, spaces] = await Promise.all([api().getPrefs(), api().listSpaces()])
+    // 偏好里记住的空间可能已被删除，回退到第一个
+    const activeSpaceId =
+      prefs.activeSpaceId && spaces.some((s) => s.id === prefs.activeSpaceId)
+        ? prefs.activeSpaceId
+        : (spaces[0]?.id ?? null)
+    set({ spaces, activeSpaceId })
     await get().refresh()
     set({ initialized: true })
     window.api.onDataChanged(() => {
@@ -88,12 +110,51 @@ export const useTodos = create<TodosStore>((set, get) => ({
   },
 
   refresh: async () => {
-    const [todos, tags] = await Promise.all([api().listTodos(), api().allTags()])
-    set({ todos, tags, loading: false })
+    const activeSpaceId = get().activeSpaceId
+    const [todos, tags, spaces] = await Promise.all([
+      api().listTodos(),
+      api().allTags(activeSpaceId),
+      api().listSpaces()
+    ])
+    const nextActive =
+      activeSpaceId && spaces.some((s) => s.id === activeSpaceId)
+        ? activeSpaceId
+        : (spaces[0]?.id ?? null)
+    set({ todos, tags, spaces, activeSpaceId: nextActive, loading: false })
+  },
+
+  setActiveSpace: async (id) => {
+    if (get().activeSpaceId === id) return
+    await api().setActiveSpace(id)
+    set({ activeSpaceId: id, selectedId: null, undo: null })
+    await get().refresh()
+  },
+
+  createSpace: async (input) => {
+    const space = await api().createSpace(input)
+    await api().setActiveSpace(space.id)
+    set({ activeSpaceId: space.id })
+    await get().refresh()
+  },
+
+  updateSpace: async (id, patch) => {
+    await api().updateSpace(id, patch)
+    await get().refresh()
+  },
+
+  deleteSpace: async (id) => {
+    const res = await api().deleteSpace(id)
+    if (!res.removed) return
+    await get().refresh()
+    if (res.movedTo) await api().setActiveSpace(res.movedTo)
+    await get().refresh()
   },
 
   create: async (input) => {
-    const todo = await api().createTodo(input)
+    const todo = await api().createTodo({
+      ...input,
+      spaceId: input.spaceId ?? get().activeSpaceId ?? undefined
+    })
     await get().refresh()
     return todo
   },
@@ -142,6 +203,7 @@ export const useTodos = create<TodosStore>((set, get) => ({
         run: async () => {
           await api().createTodo({
             title: todo?.title ?? '',
+            spaceId: todo?.spaceId,
             notes: todo?.notes,
             importance: todo?.importance,
             urgency: todo?.urgency,

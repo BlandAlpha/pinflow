@@ -63,6 +63,7 @@ describe('白板坐标系', () => {
 function todo(patch: Partial<Todo> = {}): Todo {
   return {
     id: 't1',
+    spaceId: 'work',
     title: 'test',
     notes: '',
     importance: 'normal',

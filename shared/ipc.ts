@@ -1,10 +1,14 @@
 import type {
   AppPrefs,
+  CreateSpaceInput,
   CreateTodoInput,
   Quadrant,
+  Space,
+  SpaceDeleteResult,
   Step,
   ThemeMode,
   Todo,
+  UpdateSpaceInput,
   UpdateTodoInput
 } from './types'
 
@@ -21,6 +25,11 @@ export const IPC = {
   TODOS_ADD_TAG: 'todos:addTag',
   TODOS_REMOVE_TAG: 'todos:removeTag',
   TODOS_ALL_TAGS: 'todos:allTags',
+
+  SPACES_LIST: 'spaces:list',
+  SPACES_CREATE: 'spaces:create',
+  SPACES_UPDATE: 'spaces:update',
+  SPACES_DELETE: 'spaces:delete',
 
   STEPS_ADD: 'steps:add',
   STEPS_UPDATE: 'steps:update',
@@ -40,6 +49,7 @@ export const IPC = {
   APP_GET_AUTO_LAUNCH: 'app:getAutoLaunch',
   APP_GET_PREFS: 'app:getPrefs',
   APP_SET_THEME: 'app:setTheme',
+  APP_SET_ACTIVE_SPACE: 'app:setActiveSpace',
 
   CAPTURE_CLOSE: 'capture:close',
   CAPTURE_SUBMIT: 'capture:submit',
@@ -64,7 +74,13 @@ export interface TodoApi {
   reorderTodos(orderedIds: string[]): Promise<Todo[]>
   addTag(id: string, tag: string): Promise<Todo>
   removeTag(id: string, tag: string): Promise<Todo>
-  allTags(): Promise<string[]>
+  /** 当前空间内的标签（传 null 表示全部） */
+  allTags(spaceId?: string | null): Promise<string[]>
+
+  listSpaces(): Promise<Space[]>
+  createSpace(input: CreateSpaceInput): Promise<Space>
+  updateSpace(id: string, patch: UpdateSpaceInput): Promise<Space>
+  deleteSpace(id: string, moveToId?: string): Promise<SpaceDeleteResult>
 
   addStep(todoId: string, title: string): Promise<Step>
   updateStep(stepId: string, patch: Partial<Pick<Step, 'title' | 'completed'>>): Promise<Step>
@@ -82,6 +98,7 @@ export interface TodoApi {
   setAutoLaunch(enabled: boolean): Promise<boolean>
   getPrefs(): Promise<AppPrefs>
   setTheme(theme: ThemeMode): Promise<AppPrefs>
+  setActiveSpace(id: string | null): Promise<AppPrefs>
   /** 订阅「数据已变更」（来自快速捕获窗口等） */
   onDataChanged(cb: () => void): () => void
   /** 订阅「新建任务」请求（系统托盘菜单） */

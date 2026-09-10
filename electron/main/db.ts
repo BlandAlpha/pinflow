@@ -1,19 +1,33 @@
 import { randomUUID } from 'node:crypto'
 import Database from 'better-sqlite3'
 import type {
+  CreateSpaceInput,
   CreateTodoInput,
   Level,
   Quadrant,
+  Space,
+  SpaceColor,
+  SpaceDeleteResult,
+  SpaceIcon,
   Step,
   Todo,
   TodoStatus,
+  UpdateSpaceInput,
   UpdateTodoInput
 } from '@shared/types'
+import { SPACE_COLORS, SPACE_ICONS } from '@shared/types'
 import { quadrantToLevels } from '@shared/quadrant'
 import { positionForQuadrant, levelsAt } from '@shared/board'
+import { getPrefs } from './prefs'
 
 /** 当前 schema 版本，递增时追加迁移步骤 */
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 5
+
+/** 出厂默认空间：工作 / 生活（固定 id，便于迁移与偏好记忆） */
+const DEFAULT_SPACES: { id: string; name: string; icon: SpaceIcon; color: SpaceColor }[] = [
+  { id: 'work', name: '工作', icon: 'briefcase', color: 'blue' },
+  { id: 'life', name: '生活', icon: 'home', color: 'green' }
+]
 
 interface TodoRow {
   id: string
@@ -32,6 +46,16 @@ interface TodoRow {
   sort_order: number
   board_x: number | null
   board_y: number | null
+  space_id: string | null
+}
+
+interface SpaceRow {
+  id: string
+  name: string
+  icon: string
+  color: string
+  sort_order: number
+  created_at: string
 }
 
 interface StepRow {
@@ -152,7 +176,64 @@ function migrate(d: Database.Database): void {
     // v4：坐标系改为数学约定（右=紧急、上=重要）。旧数据落在「左=紧急」，整列水平翻转即可。
     d.exec('UPDATE todos SET board_x = 1 - board_x WHERE board_x IS NOT NULL')
   }
+  if (current < 5) {
+    // v5：空间（工作 / 生活…）——把不同生活面的任务彻底分开
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS spaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        icon TEXT NOT NULL DEFAULT 'folder',
+        color TEXT NOT NULL DEFAULT 'blue',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+    `)
+    const count = d.prepare('SELECT COUNT(*) AS c FROM spaces').get() as { c: number }
+    if (count.c === 0) {
+      const ins = d.prepare(
+        'INSERT INTO spaces (id, name, icon, color, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      )
+      const ts = new Date().toISOString()
+      DEFAULT_SPACES.forEach((s, i) => ins.run(s.id, s.name, s.icon, s.color, i, ts))
+    }
+    const cols = d.prepare('PRAGMA table_info(todos)').all() as { name: string }[]
+    if (!cols.some((c) => c.name === 'space_id')) {
+      d.exec('ALTER TABLE todos ADD COLUMN space_id TEXT')
+    }
+    const fallback = defaultSpaceId(d)
+    d.prepare('UPDATE todos SET space_id = ? WHERE space_id IS NULL OR space_id = ?').run(
+      fallback,
+      ''
+    )
+    d.exec('CREATE INDEX IF NOT EXISTS idx_todos_space ON todos(space_id)')
+  }
   d.pragma(`user_version = ${SCHEMA_VERSION}`)
+}
+
+/** 第一个空间（按排序），作为兜底归属 */
+function defaultSpaceId(d: Database.Database = instance()): string {
+  const row = d
+    .prepare('SELECT id FROM spaces ORDER BY sort_order ASC, created_at ASC LIMIT 1')
+    .get() as { id: string } | undefined
+  return row?.id ?? DEFAULT_SPACES[0].id
+}
+
+/** 解析任务该落到哪个空间：显式指定 > 偏好里的当前空间 > 第一个空间 */
+function resolveSpaceId(d: Database.Database, explicit?: string): string {
+  if (explicit) {
+    const hit = d.prepare('SELECT id FROM spaces WHERE id = ?').get(explicit) as
+      | { id: string }
+      | undefined
+    if (hit) return hit.id
+  }
+  const preferred = getPrefs().activeSpaceId
+  if (preferred) {
+    const hit = d.prepare('SELECT id FROM spaces WHERE id = ?').get(preferred) as
+      | { id: string }
+      | undefined
+    if (hit) return hit.id
+  }
+  return defaultSpaceId(d)
 }
 
 function levelToQuadrant(importance: Level, urgency: Level): 1 | 2 | 3 | 4 {
@@ -192,9 +273,29 @@ function parseTags(raw: string): string[] {
   }
 }
 
+function toSpaceIcon(v: string): SpaceIcon {
+  return (SPACE_ICONS as string[]).includes(v) ? (v as SpaceIcon) : 'folder'
+}
+
+function toSpaceColor(v: string): SpaceColor {
+  return (SPACE_COLORS as string[]).includes(v) ? (v as SpaceColor) : 'blue'
+}
+
+function mapSpace(row: SpaceRow): Space {
+  return {
+    id: row.id,
+    name: row.name,
+    icon: toSpaceIcon(row.icon),
+    color: toSpaceColor(row.color),
+    order: row.sort_order ?? 0,
+    createdAt: row.created_at
+  }
+}
+
 function mapTodo(row: TodoRow, steps: Step[]): Todo {
   return {
     id: row.id,
+    spaceId: row.space_id ?? defaultSpaceId(),
     title: row.title,
     notes: row.notes,
     importance: toLevel(row.importance),
@@ -266,10 +367,11 @@ export function createTodo(input: CreateTodoInput): Todo {
   const id = randomUUID()
   const min = d.prepare('SELECT COALESCE(MIN(sort_order), 0) AS m FROM todos').get() as { m: number }
   d.prepare(
-    `INSERT INTO todos (id, title, notes, importance, urgency, due_at, status, created_at, updated_at, completed_at, tags, pinned, classified, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO todos (id, space_id, title, notes, importance, urgency, due_at, status, created_at, updated_at, completed_at, tags, pinned, classified, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
+    resolveSpaceId(d, input.spaceId),
     input.title.trim(),
     input.notes ?? '',
     input.importance ?? 'normal',
@@ -300,6 +402,7 @@ export function updateTodo(input: UpdateTodoInput): Todo {
 
   if (input.title !== undefined) push('title', input.title.trim())
   if (input.notes !== undefined) push('notes', input.notes)
+  if (input.spaceId !== undefined) push('space_id', resolveSpaceId(d, input.spaceId))
   if (input.importance !== undefined) push('importance', input.importance)
   if (input.urgency !== undefined) push('urgency', input.urgency)
   if (input.dueAt !== undefined) push('due_at', input.dueAt)
@@ -378,12 +481,89 @@ export function removeTag(id: string, tag: string): Todo {
   return updateTodo({ id, tags: t.tags.filter((x) => x !== tag) })
 }
 
-export function allTags(): string[] {
+export function allTags(spaceId?: string | null): string[] {
   const d = instance()
-  const rows = d.prepare('SELECT tags FROM todos').all() as { tags: string }[]
+  const rows = (
+    spaceId
+      ? d.prepare('SELECT tags FROM todos WHERE space_id = ?').all(spaceId)
+      : d.prepare('SELECT tags FROM todos').all()
+  ) as { tags: string }[]
   const set = new Set<string>()
   for (const r of rows) for (const t of parseTags(r.tags)) set.add(t)
   return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+}
+
+/* ------------------------------ 空间 ------------------------------ */
+
+export function listSpaces(): Space[] {
+  const d = instance()
+  return (
+    d.prepare('SELECT * FROM spaces ORDER BY sort_order ASC, created_at ASC').all() as SpaceRow[]
+  ).map(mapSpace)
+}
+
+export function createSpace(input: CreateSpaceInput): Space {
+  const d = instance()
+  const id = randomUUID()
+  const max = d.prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM spaces').get() as {
+    m: number
+  }
+  d.prepare(
+    'INSERT INTO spaces (id, name, icon, color, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(
+    id,
+    input.name.trim() || '新空间',
+    input.icon ?? 'folder',
+    input.color ?? 'blue',
+    max.m + 1,
+    nowIso()
+  )
+  const row = d.prepare('SELECT * FROM spaces WHERE id = ?').get(id) as SpaceRow
+  return mapSpace(row)
+}
+
+export function updateSpace(id: string, patch: UpdateSpaceInput): Space {
+  const d = instance()
+  const sets: string[] = []
+  const values: unknown[] = []
+  if (patch.name !== undefined && patch.name.trim()) {
+    sets.push('name = ?')
+    values.push(patch.name.trim())
+  }
+  if (patch.icon !== undefined) {
+    sets.push('icon = ?')
+    values.push(patch.icon)
+  }
+  if (patch.color !== undefined) {
+    sets.push('color = ?')
+    values.push(patch.color)
+  }
+  if (sets.length > 0) {
+    values.push(id)
+    d.prepare(`UPDATE spaces SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+  }
+  const row = d.prepare('SELECT * FROM spaces WHERE id = ?').get(id) as SpaceRow | undefined
+  if (!row) throw new Error(`空间不存在: ${id}`)
+  return mapSpace(row)
+}
+
+/**
+ * 删除空间：其中的任务不会被删掉，而是搬到一个仍然存在的空间。
+ * 只剩最后一个空间时拒绝删除。
+ */
+export function deleteSpace(id: string, moveToId?: string): SpaceDeleteResult {
+  const d = instance()
+  const all = listSpaces()
+  if (all.length <= 1) return { removed: false, movedTo: null, movedCount: 0 }
+  const target =
+    (moveToId && all.find((s) => s.id === moveToId && s.id !== id)?.id) ??
+    all.find((s) => s.id !== id)?.id ??
+    null
+  if (!target) return { removed: false, movedTo: null, movedCount: 0 }
+
+  const moved = d.prepare('UPDATE todos SET space_id = ? WHERE space_id = ?').run(target, id)
+  d.prepare('DELETE FROM spaces WHERE id = ?').run(id)
+  return { removed: true, movedTo: target, movedCount: moved.changes }
 }
 
 /* ------------------------------ 步骤 ------------------------------ */

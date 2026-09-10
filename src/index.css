@@ -46,6 +46,14 @@
     --q4: 220 9% 42%;
     --q4-tint: 220 14% 95.5%;
 
+    /* 空间标识色 */
+    --space-blue: 214 80% 50%;
+    --space-green: 152 42% 38%;
+    --space-amber: 32 80% 42%;
+    --space-rose: 346 68% 48%;
+    --space-violet: 268 58% 54%;
+    --space-slate: 220 9% 42%;
+
     --shadow-card: 0 1px 2px hsl(220 14% 16% / 0.05);
     --shadow-raised: 0 6px 16px -6px hsl(220 14% 16% / 0.18);
     --shadow-pop: 0 8px 28px -8px hsl(220 14% 16% / 0.22);
@@ -87,6 +95,13 @@
     --q3-tint: 32 24% 13%;
     --q4: 220 8% 52%;
     --q4-tint: 220 8% 12%;
+
+    --space-blue: 214 80% 64%;
+    --space-green: 152 40% 54%;
+    --space-amber: 32 78% 58%;
+    --space-rose: 346 70% 62%;
+    --space-violet: 268 60% 70%;
+    --space-slate: 220 8% 62%;
 
     --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3);
     --shadow-raised: 0 8px 20px -8px hsl(0 0% 0% / 0.6);

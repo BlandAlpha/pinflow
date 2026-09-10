@@ -8,7 +8,8 @@ export function useVisibleTodos(): Todo[] {
   const todos = useTodos((s) => s.todos)
   const view = useTodos((s) => s.view)
   const filter = useTodos((s) => s.filter)
-  return useMemo(() => computeVisible(todos, view, filter), [todos, view, filter])
+  const spaceId = useTodos((s) => s.activeSpaceId)
+  return useMemo(() => computeVisible(todos, view, filter, spaceId), [todos, view, filter, spaceId])
 }
 
 export function groupByQuadrant(todos: Todo[]): Record<Quadrant, Todo[]> {

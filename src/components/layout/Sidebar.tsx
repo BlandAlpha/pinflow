@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Inbox, LayoutGrid, ListTree, Settings, Sun } from 'lucide-react'
 import type { ViewKey } from '@shared/types'
 import { useTodos } from '@/store/todos'
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ThemeSwitcher } from '@/components/theme/ThemeSwitcher'
 import { SettingsDialog } from '@/components/layout/SettingsDialog'
+import { SpaceSwitcher } from '@/components/layout/SpaceSwitcher'
 
 type SidebarMode = 'full' | 'compact' | 'icon'
 
@@ -49,6 +50,7 @@ export function Sidebar() {
   const view = useTodos((s) => s.view)
   const setView = useTodos((s) => s.setView)
   const todos = useTodos((s) => s.todos)
+  const activeSpaceId = useTodos((s) => s.activeSpaceId)
   const tags = useTodos((s) => s.tags)
   const filter = useTodos((s) => s.filter)
   const setFilter = useTodos((s) => s.setFilter)
@@ -56,11 +58,17 @@ export function Sidebar() {
   const expanded = mode !== 'full' && hover
   const showLabels = mode === 'full' || expanded
 
+  // 计数只统计当前空间：空间是硬边界
+  const scoped = useMemo(
+    () => (activeSpaceId ? todos.filter((t) => t.spaceId === activeSpaceId) : todos),
+    [todos, activeSpaceId]
+  )
+
   const counts: Record<ViewKey, number> = {
-    inbox: todos.filter((t) => t.status === 'active' && isInboxTask(t)).length,
-    today: todos.filter((t) => t.status === 'active').length,
-    board: todos.filter((t) => t.status === 'active').length,
-    all: todos.length
+    inbox: scoped.filter((t) => t.status === 'active' && isInboxTask(t)).length,
+    today: scoped.filter((t) => t.status === 'active').length,
+    board: scoped.filter((t) => t.status === 'active').length,
+    all: scoped.length
   }
 
   const nav = (
@@ -72,23 +80,19 @@ export function Sidebar() {
             key={item.key}
             onClick={() => setView(item.key)}
             className={cn(
-              'flex w-full items-center rounded-md text-left transition-colors',
-              showLabels ? 'gap-2 px-2 py-1.5 text-[13px]' : 'flex-col justify-center gap-0.5 px-1 py-1.5',
+              'flex h-8 w-full items-center rounded-md text-left transition-colors',
+              showLabels ? 'gap-2 px-2 text-[13px]' : 'justify-center px-0',
               active
                 ? 'bg-primary/10 font-medium text-primary'
                 : 'text-foreground/80 hover:bg-accent hover:text-foreground'
             )}
           >
             <item.icon className="h-4 w-4 shrink-0" />
-            {showLabels ? (
+            {showLabels && (
               <>
                 <span className="flex-1 truncate">{item.label}</span>
                 <span className="font-mono text-2xs text-muted-foreground">{counts[item.key]}</span>
               </>
-            ) : (
-              <span className="font-mono text-[10px] leading-none text-muted-foreground">
-                {counts[item.key]}
-              </span>
             )}
           </button>
         )
@@ -134,7 +138,7 @@ export function Sidebar() {
         showLabels ? 'items-stretch' : 'items-center'
       )}
     >
-      <ThemeSwitcher />
+      <ThemeSwitcher showLabel={showLabels} />
       {showLabels ? (
         <Button
           variant="ghost"
@@ -164,6 +168,12 @@ export function Sidebar() {
     </div>
   )
 
+  const spaceBar = (
+    <div className="shrink-0 border-t border-border p-2">
+      <SpaceSwitcher showLabel={showLabels} onManage={() => setSettingsOpen(true)} />
+    </div>
+  )
+
   return (
     <div className="relative shrink-0" style={{ width: RAIL[mode] }}>
       <aside
@@ -176,6 +186,7 @@ export function Sidebar() {
         style={{ width: showLabels ? RAIL.full : RAIL[mode] }}
       >
         {nav}
+        {spaceBar}
         {footer}
       </aside>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

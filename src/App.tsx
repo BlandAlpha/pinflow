@@ -23,6 +23,8 @@ function Workspace() {
   const setQuadrant = useTodos((s) => s.setQuadrant)
   const archive = useTodos((s) => s.archive)
   const remove = useTodos((s) => s.remove)
+  const spaces = useTodos((s) => s.spaces)
+  const setActiveSpace = useTodos((s) => s.setActiveSpace)
   const todos = useVisibleTodos()
 
   useEffect(() => {
@@ -37,6 +39,16 @@ function Workspace() {
         return
       }
       if (isTypingTarget(e.target)) return
+
+      // Alt+1..9：快速切换空间
+      if (e.altKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) {
+        const target = spaces[Number(e.key) - 1]
+        if (target) {
+          e.preventDefault()
+          void setActiveSpace(target.id)
+        }
+        return
+      }
 
       const idx = selectedId ? todos.findIndex((t) => t.id === selectedId) : -1
 
@@ -91,7 +103,18 @@ function Workspace() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [initialized, selectedId, todos, select, toggle, setQuadrant, archive, remove])
+  }, [
+    initialized,
+    selectedId,
+    todos,
+    spaces,
+    select,
+    toggle,
+    setQuadrant,
+    archive,
+    remove,
+    setActiveSpace
+  ])
 
   return (
     <div className="flex h-full flex-col">

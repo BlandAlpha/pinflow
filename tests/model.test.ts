@@ -7,6 +7,7 @@ import type { Todo } from '@shared/types'
 function todo(patch: Partial<Todo> = {}): Todo {
   return {
     id: Math.random().toString(36).slice(2),
+    spaceId: 'work',
     title: 'test',
     notes: '',
     importance: 'low',

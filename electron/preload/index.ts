@@ -19,6 +19,11 @@ const api: TodoApi & { themeSnapshot: typeof themeSnapshot } = {
   removeTag: (id, tag) => ipcRenderer.invoke(IPC.TODOS_REMOVE_TAG, id, tag),
   allTags: (): Promise<string[]> => ipcRenderer.invoke(IPC.TODOS_ALL_TAGS),
 
+  listSpaces: () => ipcRenderer.invoke(IPC.SPACES_LIST),
+  createSpace: (input) => ipcRenderer.invoke(IPC.SPACES_CREATE, input),
+  updateSpace: (id, patch) => ipcRenderer.invoke(IPC.SPACES_UPDATE, id, patch),
+  deleteSpace: (id, moveToId) => ipcRenderer.invoke(IPC.SPACES_DELETE, id, moveToId),
+
   addStep: (todoId, title) => ipcRenderer.invoke(IPC.STEPS_ADD, todoId, title),
   updateStep: (stepId, patch) => ipcRenderer.invoke(IPC.STEPS_UPDATE, stepId, patch),
   deleteStep: (stepId) => ipcRenderer.invoke(IPC.STEPS_DELETE, stepId),
@@ -35,6 +40,7 @@ const api: TodoApi & { themeSnapshot: typeof themeSnapshot } = {
   setAutoLaunch: (enabled): Promise<boolean> => ipcRenderer.invoke(IPC.APP_SET_AUTO_LAUNCH, enabled),
   getPrefs: (): Promise<AppPrefs> => ipcRenderer.invoke(IPC.APP_GET_PREFS),
   setTheme: (theme) => ipcRenderer.invoke(IPC.APP_SET_THEME, theme),
+  setActiveSpace: (id) => ipcRenderer.invoke(IPC.APP_SET_ACTIVE_SPACE, id),
 
   onDataChanged: (cb) => {
     const listener = () => cb()

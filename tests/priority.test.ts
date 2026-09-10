@@ -7,6 +7,7 @@ const NOW = new Date('2026-01-10T09:00:00Z')
 function todo(patch: Partial<Todo> = {}): Todo {
   return {
     id: 't1',
+    spaceId: 'work',
     title: 'test',
     notes: '',
     importance: 'normal',

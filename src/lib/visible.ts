@@ -87,32 +87,37 @@ function sortAll(list: Todo[], sort: TodoFilter['sort']): Todo[] {
   }
 }
 
-/** 根据视图与筛选条件计算当前应展示的任务列表 */
+/**
+ * 根据空间、视图与筛选条件计算当前应展示的任务列表。
+ * 空间是硬边界：所有视图都只是同一份数据在当前空间里的投影。
+ */
 export function computeVisible(
   todos: Todo[],
   view: ViewKey,
   filter: TodoFilter,
+  spaceId: string | null = null,
   now = new Date()
 ): Todo[] {
+  const scoped = spaceId ? todos.filter((t) => t.spaceId === spaceId) : todos
   switch (view) {
     case 'inbox':
-      return todos
+      return scoped
         .filter((t) => t.status === 'active' && isInboxTask(t))
         .slice()
         .sort((a, b) => a.order - b.order || b.createdAt.localeCompare(a.createdAt))
     case 'today': {
-      const active = todos.filter((t) => t.status === 'active')
+      const active = scoped.filter((t) => t.status === 'active')
       return sortByPriority(active, now)
     }
     case 'board':
       // 白板自行按坐标铺开（未落点的任务自动排布）
-      return todos
+      return scoped
         .filter((t) => t.status === 'active')
         .slice()
         .sort((a, b) => a.order - b.order || b.createdAt.localeCompare(a.createdAt))
     case 'all':
     default: {
-      const matched = todos.filter((t) => matchesFilter(t, filter))
+      const matched = scoped.filter((t) => matchesFilter(t, filter))
       return sortAll(matched, filter.sort)
     }
   }

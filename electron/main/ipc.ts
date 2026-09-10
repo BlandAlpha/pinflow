@@ -2,15 +2,23 @@ import { BrowserWindow, app, ipcMain, shell } from 'electron'
 import { IPC } from '@shared/ipc'
 import type {
   AppPrefs,
+  CreateSpaceInput,
   CreateTodoInput,
   Quadrant,
   Step,
   ThemeMode,
   Todo,
+  UpdateSpaceInput,
   UpdateTodoInput
 } from '@shared/types'
 import * as db from './db'
-import { applyTheme, getPrefs, resolvedTheme, setTheme } from './prefs'
+import {
+  applyTheme,
+  getPrefs,
+  resolvedTheme,
+  setActiveSpace,
+  setTheme
+} from './prefs'
 
 /** preload 首帧同步读取的主题快照 */
 export interface ThemeSnapshot {
@@ -62,7 +70,11 @@ export function registerIpcHandlers(): void {
     return ok
   })
 
-  ipcMain.handle(IPC.TODOS_TOGGLE, (_e, id: string): Todo => db.toggleTodo(id))
+  ipcMain.handle(IPC.TODOS_TOGGLE, (_e, id: string): Todo => {
+    const todo = db.toggleTodo(id)
+    broadcastDataChanged()
+    return todo
+  })
   ipcMain.handle(IPC.TODOS_SET_QUADRANT, (_e, id: string, q: Quadrant): Todo => {
     const todo = db.setQuadrant(id, q)
     broadcastDataChanged()
@@ -91,7 +103,31 @@ export function registerIpcHandlers(): void {
     broadcastDataChanged()
     return todo
   })
-  ipcMain.handle(IPC.TODOS_ALL_TAGS, (): string[] => db.allTags())
+  ipcMain.handle(IPC.TODOS_ALL_TAGS, (_e, spaceId?: string | null): string[] =>
+    db.allTags(spaceId ?? null)
+  )
+
+  /* ---------- 空间 ---------- */
+  ipcMain.handle(IPC.SPACES_LIST, () => db.listSpaces())
+  ipcMain.handle(IPC.SPACES_CREATE, (_e, input: CreateSpaceInput) => {
+    const space = db.createSpace(input)
+    broadcastDataChanged()
+    return space
+  })
+  ipcMain.handle(IPC.SPACES_UPDATE, (_e, id: string, patch: UpdateSpaceInput) => {
+    const space = db.updateSpace(id, patch)
+    broadcastDataChanged()
+    return space
+  })
+  ipcMain.handle(IPC.SPACES_DELETE, (_e, id: string, moveToId?: string) => {
+    const res = db.deleteSpace(id, moveToId)
+    if (res.removed) {
+      // 删掉的正是当前空间时，把偏好指向接手任务的空间
+      if (getPrefs().activeSpaceId === id) setActiveSpace(res.movedTo)
+      broadcastDataChanged()
+    }
+    return res
+  })
 
   /* ---------- Steps ---------- */
   ipcMain.handle(IPC.STEPS_ADD, (_e, todoId: string, title: string): Step => {
@@ -112,7 +148,11 @@ export function registerIpcHandlers(): void {
     broadcastDataChanged()
     return ok
   })
-  ipcMain.handle(IPC.STEPS_TOGGLE, (_e, stepId: string): Step => db.toggleStep(stepId))
+  ipcMain.handle(IPC.STEPS_TOGGLE, (_e, stepId: string): Step => {
+    const step = db.toggleStep(stepId)
+    broadcastDataChanged()
+    return step
+  })
   ipcMain.handle(
     IPC.STEPS_REORDER,
     (_e, todoId: string, ordered: string[]): Step[] => db.reorderSteps(todoId, ordered)
@@ -143,6 +183,9 @@ export function registerIpcHandlers(): void {
     broadcastTheme(prefs.theme)
     return prefs
   })
+  ipcMain.handle(IPC.APP_SET_ACTIVE_SPACE, (_e, id: string | null): AppPrefs =>
+    setActiveSpace(id)
+  )
   ipcMain.handle(IPC.APP_SET_AUTO_LAUNCH, (_e, enabled: boolean): boolean => {
     app.setLoginItemSettings({
       openAtLogin: enabled,

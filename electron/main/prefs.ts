@@ -9,7 +9,7 @@ const WINDOW_BG: Record<'light' | 'dark', string> = {
   light: '#fafafa'
 }
 
-const DEFAULT_PREFS: AppPrefs = { theme: 'system' }
+const DEFAULT_PREFS: AppPrefs = { theme: 'system', activeSpaceId: null }
 
 let prefsFile = ''
 
@@ -30,14 +30,26 @@ export function getPrefs(): AppPrefs {
   return { ...DEFAULT_PREFS }
 }
 
-export function setTheme(theme: ThemeMode): AppPrefs {
-  const next = { ...getPrefs(), theme }
+function write(next: AppPrefs): AppPrefs {
   try {
     writeFileSync(prefsFile, JSON.stringify(next, null, 2), 'utf-8')
   } catch {
     /* 写入失败不影响运行 */
   }
   return next
+}
+
+export function setTheme(theme: ThemeMode): AppPrefs {
+  return write({ ...getPrefs(), theme })
+}
+
+export function setPrefs(patch: Partial<AppPrefs>): AppPrefs {
+  return write({ ...getPrefs(), ...patch })
+}
+
+/** 记住当前所在空间（跨窗口共享：快速捕获窗口也用得到） */
+export function setActiveSpace(id: string | null): AppPrefs {
+  return setPrefs({ activeSpaceId: id })
 }
 
 export function prefsPath(): string {

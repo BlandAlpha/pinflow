@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { app, globalShortcut, nativeTheme } from 'electron'
+import squirrelStartup from 'electron-squirrel-startup'
 import { initDatabase } from './db'
 import { broadcastTheme, registerIpcHandlers } from './ipc'
 import { applyTheme, getPrefs, initPrefs, setTheme } from './prefs'
@@ -13,6 +14,12 @@ import {
   showCaptureWindow,
   showMainWindow
 } from './windows'
+
+// Squirrel（Windows 安装/更新）在首次安装、升级、卸载时会以特殊参数启动本进程，
+// 这些阶段必须立即退出，否则安装程序会卡住。
+if (squirrelStartup) {
+  app.quit()
+}
 
 /** 全局快捷键 */
 const CAPTURE_SHORTCUT = 'Ctrl+Shift+Space'
@@ -38,6 +45,94 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | n
     timeout
   ])
 }
+
+/**
+ * 白板交互校验脚本（在渲染进程里跑）：
+ * 1) 拖动卡片 -> 坐标写回数据；2) 滚轮以光标为锚缩放；3) 拖空白平移；4) 空间切换。
+ */
+const BOARD_INTERACTION_SCRIPT = `(async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const out = {}
+  const fire = (el, type, x, y, extra) =>
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId: 1, ...(extra || {}) }))
+
+  // 1. 拖动卡片
+  const card = document.querySelector('[data-board-card]')
+  if (!card) return { ok: false, reason: 'no card' }
+  const id = card.getAttribute('data-board-card')
+  const before = { left: card.style.left, top: card.style.top }
+  const r = card.getBoundingClientRect()
+  const cx = r.left + r.width / 2
+  const cy = r.top + r.height / 2
+  fire(card, 'pointerdown', cx, cy)
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: cx + 170, clientY: cy + 110, pointerId: 1 }))
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: cx + 170, clientY: cy + 110, pointerId: 1 }))
+  await sleep(700)
+  const after = document.querySelector('[data-board-card="' + id + '"]')
+  out.drag = {
+    before,
+    after: after ? { left: after.style.left, top: after.style.top } : null,
+    moved: !!after && (after.style.left !== before.left || after.style.top !== before.top)
+  }
+
+  // 2. 滚轮缩放（锚点在光标处）
+  const vp = document.querySelector('[data-board-viewport]')
+  const stage = document.querySelector('[data-board-stage]')
+  const zoomLabel = () => document.querySelector('[data-zoom-label]')?.textContent?.trim()
+  const zoomBefore = zoomLabel()
+  const vr = vp.getBoundingClientRect()
+  vp.dispatchEvent(new WheelEvent('wheel', {
+    bubbles: true, cancelable: true, deltaY: -300,
+    clientX: vr.left + vr.width * 0.75, clientY: vr.top + vr.height * 0.3
+  }))
+  await sleep(500)
+  out.zoom = {
+    before: zoomBefore,
+    after: zoomLabel(),
+    transform: stage?.style.transform || null
+  }
+
+  // 3. 拖空白平移
+  const tBefore = stage?.style.transform
+  fire(vp, 'pointerdown', vr.left + 12, vr.top + 12)
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: vr.left + 120, clientY: vr.top + 80, pointerId: 1 }))
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: vr.left + 120, clientY: vr.top + 80, pointerId: 1 }))
+  await sleep(300)
+  out.pan = { before: tBefore, after: stage?.style.transform || null, changed: tBefore !== stage?.style.transform }
+
+  // 4. 空间切换
+  const sw = document.querySelector('[aria-label^="空间"]')
+  if (sw) {
+    const sr = sw.getBoundingClientRect()
+    fire(sw, 'pointerdown', sr.left + sr.width / 2, sr.top + sr.height / 2)
+    fire(sw, 'pointerup', sr.left + sr.width / 2, sr.top + sr.height / 2)
+    sw.click()
+    await sleep(400)
+    out.spaces = {
+      trigger: sw.textContent?.trim().slice(0, 12),
+      menuItems: document.querySelectorAll('[role="menuitem"]').length
+    }
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await sleep(200)
+  }
+  // 5. 设置里的空间管理（先关掉空间菜单，免得挡住点击）
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  await sleep(300)
+  const settingsBtn =
+    document.querySelector('[aria-label="设置"]') ||
+    Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim() === '设置')
+  settingsBtn?.click()
+  await sleep(600)
+  const dialog = document.querySelector('[role="dialog"]')
+  out.settings = {
+    foundButton: !!settingsBtn,
+    opened: !!dialog,
+    hasSpaceSection: !!dialog && dialog.textContent.includes('空间'),
+    spaceRows: dialog ? dialog.querySelectorAll('input').length : 0
+  }
+  out.ok = true
+  return out
+})()`
 
 /** 开发用：启动后自动写入示例数据、对各窗口截图、验证全局快捷键，然后退出 */
 async function runSmokeTest(): Promise<void> {
@@ -172,6 +267,20 @@ async function runSmokeTest(): Promise<void> {
       main.setSize(original[0], original[1])
       main.center()
       await sleep(300)
+    }
+
+    // 交互校验：白板拖拽 / 光标锚定缩放 / 空间切换（--smoke-interact）
+    if (process.argv.includes('--smoke-interact')) {
+      await nav(2) // 白板
+      await sleep(600)
+      const result = await withTimeout(
+        main.webContents.executeJavaScript(BOARD_INTERACTION_SCRIPT),
+        15000,
+        'board interaction'
+      )
+      log(`interact=${JSON.stringify(result)}`)
+      writeFileSync(join(shotDir, 'interact.json'), JSON.stringify(result, null, 2))
+      await shot('settings-spaces')
     }
 
     const shortcutOk = globalShortcut.isRegistered(CAPTURE_SHORTCUT)

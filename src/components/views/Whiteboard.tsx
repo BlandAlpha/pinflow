@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, Check, ListChecks, Sparkles } from 'lucide-react'
+import { CalendarDays, Check, ListChecks, Maximize2, Minus, Plus, Sparkles } from 'lucide-react'
 import type { Todo } from '@shared/types'
 import {
   BOARD_H,
   BOARD_W,
   CARD_H,
   CARD_W,
-  avoidOverlap,
-  clampPoint,
+  clamp01,
   packFreeSpots,
   pointOf,
   quadrantAt
@@ -27,6 +26,25 @@ interface Placed {
   auto: boolean
 }
 
+interface Viewport {
+  zoom: number
+  x: number
+  y: number
+}
+
+interface BoardSize {
+  /** 画布逻辑尺寸 */
+  w: number
+  h: number
+  /** 可视区域尺寸 */
+  vw: number
+  vh: number
+}
+
+/** 缩放范围：最小 1 —— 画布永远不小于可视区，不会缩出空白 */
+const MIN_ZOOM = 1
+const MAX_ZOOM = 3
+
 const CORNER_LABELS: { className: string; text: string }[] = [
   { className: 'left-3 top-2', text: '重要 · 不紧急' },
   { className: 'right-3 top-2 text-right', text: '紧急 · 重要' },
@@ -34,10 +52,26 @@ const CORNER_LABELS: { className: string; text: string }[] = [
   { className: 'right-3 bottom-2 text-right', text: '紧急 · 不重要' }
 ]
 
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v))
+}
+
+/** 把视口夹在合法范围内：画布永远铺满可视区，拖不出边界 */
+function clampViewport(v: Viewport, size: BoardSize): Viewport {
+  const zoom = clamp(v.zoom, MIN_ZOOM, MAX_ZOOM)
+  const minX = Math.min(0, size.vw - size.w * zoom)
+  const minY = Math.min(0, size.vh - size.h * zoom)
+  return {
+    zoom,
+    x: clamp(v.x, minX, 0),
+    y: clamp(v.y, minY, 0)
+  }
+}
+
 /**
  * 白板：一块连续的「重要性 × 紧急性」二维空间。
- * 上=重要，下=不重要，左=紧急，右=不紧急。
- * 任务是空间里可以自由摆放的便签，位置本身就是分类。
+ * 上=重要，下=不重要，左=不紧急，右=紧急。
+ * 卡片可以直接拖 —— 拖到哪儿就是哪儿，坐标即数据；缩放以光标为锚点，带补间。
  */
 export function Whiteboard() {
   const todos = useVisibleTodos()
@@ -47,22 +81,84 @@ export function Whiteboard() {
   const setPosition = useTodos((s) => s.setPosition)
 
   const wrapRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLDivElement>(null)
-  const [size, setSize] = useState({ w: BOARD_W, h: BOARD_H })
-  const [zoom, setZoom] = useState(1)
+  const [size, setSize] = useState<BoardSize>({ w: BOARD_W, h: BOARD_H, vw: BOARD_W, vh: BOARD_H })
+  const sizeRef = useRef(size)
+  sizeRef.current = size
+
+  const [vp, setVp] = useState<Viewport>({ zoom: 1, x: 0, y: 0 })
+  const vpRef = useRef(vp)
+  vpRef.current = vp
+  const targetRef = useRef(vp)
+  const rafRef = useRef<number | null>(null)
+
   const [draft, setDraft] = useState<{ id: string; x: number; y: number } | null>(null)
-  const dragRef = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number; moved: boolean } | null>(
-    null
+  const [panning, setPanning] = useState(false)
+
+  const stopAnim = useCallback(() => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+  }, [])
+
+  /** 立即生效（拖动画布用） */
+  const applyNow = useCallback(
+    (next: Viewport) => {
+      stopAnim()
+      const c = clampViewport(next, sizeRef.current)
+      vpRef.current = c
+      targetRef.current = c
+      setVp(c)
+    },
+    [stopAnim]
   )
 
+  /** 补间到目标视口（缩放用）：指数趋近，约 190ms 走完 96% */
+  const applySmooth = useCallback(
+    (next: Viewport) => {
+      targetRef.current = clampViewport(next, sizeRef.current)
+      if (rafRef.current != null) return
+      let last = performance.now()
+      const tick = (now: number) => {
+        const dt = Math.min(64, now - last)
+        last = now
+        const cur = vpRef.current
+        const tgt = targetRef.current
+        const k = 1 - Math.pow(0.04, dt / 190)
+        const nextVp: Viewport = {
+          zoom: cur.zoom + (tgt.zoom - cur.zoom) * k,
+          x: cur.x + (tgt.x - cur.x) * k,
+          y: cur.y + (tgt.y - cur.y) * k
+        }
+        const settled =
+          Math.abs(tgt.zoom - nextVp.zoom) < 0.0006 &&
+          Math.abs(tgt.x - nextVp.x) < 0.35 &&
+          Math.abs(tgt.y - nextVp.y) < 0.35
+        if (settled) {
+          vpRef.current = tgt
+          setVp(tgt)
+          rafRef.current = null
+          return
+        }
+        vpRef.current = nextVp
+        setVp(nextVp)
+        rafRef.current = requestAnimationFrame(tick)
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    },
+    []
+  )
+
+  useEffect(() => stopAnim, [stopAnim])
+
+  /* ------------------------------ 尺寸 ------------------------------ */
   useLayoutEffect(() => {
     const el = wrapRef.current
     if (!el) return
     const measure = () => {
-      setSize({
-        w: Math.max(BOARD_W, el.clientWidth - 8),
-        h: Math.max(BOARD_H, el.clientHeight - 8)
-      })
+      const vw = el.clientWidth
+      const vh = el.clientHeight
+      setSize({ w: Math.max(BOARD_W, vw), h: Math.max(BOARD_H, vh), vw, vh })
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -70,21 +166,120 @@ export function Whiteboard() {
     return () => ro.disconnect()
   }, [])
 
-  // Ctrl + 滚轮缩放（像捏合一样直觉）：以光标为中心放大/缩小
+  // 窗口变化后重新夹紧视口
+  useEffect(() => {
+    applyNow(vpRef.current)
+  }, [size, applyNow])
+
+  /* ------------------------------ 缩放 ------------------------------ */
+  /** 以某个屏幕点为锚缩放到目标倍率 */
+  const zoomAt = useCallback(
+    (nextZoom: number, mx: number, my: number) => {
+      const base = targetRef.current
+      const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM)
+      const ratio = zoom / base.zoom
+      applySmooth({
+        zoom,
+        x: mx - (mx - base.x) * ratio,
+        y: my - (my - base.y) * ratio
+      })
+    },
+    [applySmooth]
+  )
+
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return
       e.preventDefault()
-      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
-      setZoom((z) => Math.min(2.6, Math.max(0.5, z * factor)))
+      const rect = el.getBoundingClientRect()
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+      if (e.shiftKey && !e.ctrlKey) {
+        const base = targetRef.current
+        applySmooth({ ...base, x: base.x - e.deltaY })
+        return
+      }
+      // 连续滚轮也平滑：每像素位移对应固定的比例变化
+      zoomAt(targetRef.current.zoom * Math.exp(-e.deltaY * 0.0015), mx, my)
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [])
+  }, [zoomAt, applySmooth])
 
-  /** 已落点的任务用真实坐标；未落点的由系统自动找空位（可拖拽覆盖） */
+  const zoomByStep = (factor: number) => {
+    const { vw, vh } = sizeRef.current
+    zoomAt(targetRef.current.zoom * factor, vw / 2, vh / 2)
+  }
+
+  const resetView = () => applySmooth({ zoom: 1, x: 0, y: 0 })
+
+  /* ------------------------------ 平移 ------------------------------ */
+  const startPan = (e: React.PointerEvent) => {
+    if (e.button !== 0 && e.button !== 1) return
+    if ((e.target as HTMLElement).closest('[data-board-card],[data-no-drag]')) return
+    const startX = e.clientX
+    const startY = e.clientY
+    const base = { ...vpRef.current }
+    let moved = false
+    setPanning(true)
+
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX
+      const dy = ev.clientY - startY
+      if (!moved && Math.hypot(dx, dy) < 4) return
+      moved = true
+      applyNow({ zoom: base.zoom, x: base.x + dx, y: base.y + dy })
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      setPanning(false)
+      if (!moved) select(null)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
+  /* ------------------------------ 卡片拖拽 ------------------------------ */
+  const startDrag = (e: React.PointerEvent, p: Placed) => {
+    if (e.button !== 0) return
+    if ((e.target as HTMLElement).closest('[data-no-drag]')) return
+    e.stopPropagation()
+    const startX = e.clientX
+    const startY = e.clientY
+    const ox = p.x
+    const oy = p.y
+    let moved = false
+    let latest = { x: ox, y: oy }
+
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX
+      const dy = ev.clientY - startY
+      if (!moved && Math.hypot(dx, dy) < 3) return
+      moved = true
+      const s = sizeRef.current
+      const z = vpRef.current.zoom
+      latest = { x: ox + dx / (s.w * z), y: oy + dy / (s.h * z) }
+      setDraft({ id: p.todo.id, x: clamp01(latest.x), y: clamp01(latest.y) })
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      if (moved) void setPosition(p.todo.id, clamp01(latest.x), clamp01(latest.y))
+      else select(p.todo.id)
+      setDraft(null)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
+  /* ------------------------------ 落点 ------------------------------ */
+  /** 已落点的任务用真实坐标；未落点的由系统自动找空位（拖一下即成为真实坐标） */
   const placed = useMemo<Placed[]>(() => {
     const fixed: Placed[] = []
     const loose: Todo[] = []
@@ -99,65 +294,22 @@ export function Whiteboard() {
       { x: 0.5, y: 0.52 },
       loose.map((t) => t.id).join('|')
     )
-    const all = [
+    return [
       ...fixed,
       ...loose.map((t, i) => ({ todo: t, x: spots[i].x, y: spots[i].y, auto: true }))
     ]
-    // 展示时做一次稳定的轻量避让：同一点上的卡片会被稍稍推开，存储坐标不变
-    const taken: { x: number; y: number }[] = []
-    return all.map((p) => {
-      const next = avoidOverlap({ x: p.x, y: p.y }, taken)
-      taken.push(next)
-      return { ...p, x: next.x, y: next.y }
-    })
   }, [todos])
 
-  const commit = useCallback(
-    async (id: string, raw: { x: number; y: number }) => {
-      const others = placed.filter((p) => p.todo.id !== id).map((p) => ({ x: p.x, y: p.y }))
-      const next = avoidOverlap(clampPoint(raw), others)
-      setDraft(null)
-      await setPosition(id, next.x, next.y)
-    },
-    [placed, setPosition]
-  )
-
-  useEffect(() => {
-    if (!draft) return
-    const move = (e: PointerEvent) => {
-      const drag = dragRef.current
-      const canvas = canvasRef.current
-      if (!drag || !canvas) return
-      const dx = e.clientX - drag.startX
-      const dy = e.clientY - drag.startY
-      if (!drag.moved && Math.hypot(dx, dy) < 3) return
-      drag.moved = true
-      setDraft({
-        id: drag.id,
-        x: drag.ox + dx / canvas.clientWidth,
-        y: drag.oy + dy / canvas.clientHeight
-      })
-    }
-    const up = () => {
-      const drag = dragRef.current
-      dragRef.current = null
-      if (drag?.moved && draft) void commit(drag.id, { x: draft.x, y: draft.y })
-      else setDraft(null)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-    return () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-    }
-  }, [draft, commit])
-
   const tidy = async () => {
-    // 只整理尚未落点的任务：让它们均匀铺开，已摆好的不动
     const loose = placed.filter((p) => p.auto)
     if (loose.length === 0) return
     const fixed = placed.filter((p) => !p.auto).map((p) => ({ x: p.x, y: p.y }))
-    const spots = packFreeSpots(fixed, loose.length, { x: 0.5, y: 0.52 }, loose.map((p) => p.todo.id).join('|'))
+    const spots = packFreeSpots(
+      fixed,
+      loose.length,
+      { x: 0.5, y: 0.52 },
+      loose.map((p) => p.todo.id).join('|')
+    )
     for (let i = 0; i < loose.length; i++) {
       // 顺序执行，避免并发写同一连接
       // eslint-disable-next-line no-await-in-loop
@@ -166,29 +318,17 @@ export function Whiteboard() {
   }
 
   const unplacedCount = placed.filter((p) => p.auto).length
-
-  const w = size.w * zoom
-  const h = size.h * zoom
+  const percent = Math.round(vp.zoom * 100)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
         <h1 className="text-[15px] font-semibold tracking-tight">白板</h1>
-        <span className="text-2xs text-muted-foreground">
-          上=重要 · 右=紧急，把任务拖到合适的位置
+        <span className="hidden text-2xs text-muted-foreground xl:inline">
+          拖动卡片摆放 · 滚轮缩放 · 拖空白平移
         </span>
         <div className="flex-1" />
         <span className="text-2xs text-muted-foreground">{todos.length} 项</span>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="text-muted-foreground"
-          disabled={zoom === 1}
-          onClick={() => setZoom(1)}
-          title="重置缩放"
-        >
-          {Math.round(zoom * 100)}%
-        </Button>
         <Button
           variant="ghost"
           size="xs"
@@ -200,13 +340,64 @@ export function Whiteboard() {
           <Sparkles className="h-3 w-3" />
           整理{unplacedCount > 0 ? ` (${unplacedCount})` : ''}
         </Button>
+        <div className="flex items-center gap-0.5 rounded-md border border-border px-0.5">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-6 w-6 text-muted-foreground"
+            disabled={vp.zoom <= MIN_ZOOM + 0.001}
+            onClick={() => zoomByStep(1 / 1.25)}
+            title="缩小"
+          >
+            <Minus className="h-3 w-3" />
+          </Button>
+          <button
+            data-zoom-label
+            onClick={resetView}
+            className="min-w-[38px] px-0.5 text-center font-mono text-2xs text-muted-foreground transition-colors hover:text-foreground"
+            title="恢复 100%"
+          >
+            {percent}%
+          </button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-6 w-6 text-muted-foreground"
+            disabled={vp.zoom >= MAX_ZOOM - 0.001}
+            onClick={() => zoomByStep(1.25)}
+            title="放大"
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-6 w-6 text-muted-foreground"
+            onClick={resetView}
+            title="回到原点"
+          >
+            <Maximize2 className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
 
-      <div ref={wrapRef} className="min-h-0 flex-1 overflow-auto bg-background">
+      <div
+        ref={wrapRef}
+        data-board-viewport
+        onPointerDown={startPan}
+        className={cn(
+          'relative min-h-0 flex-1 touch-none overflow-hidden bg-background',
+          panning ? 'cursor-grabbing' : 'cursor-grab'
+        )}
+      >
         <div
-          ref={canvasRef}
-          className="relative"
-          style={{ width: w, height: h }}
+          data-board-stage
+          className="absolute left-0 top-0 origin-top-left"
+          style={{
+            width: size.w,
+            height: size.h,
+            transform: `translate3d(${vp.x}px, ${vp.y}px, 0) scale(${vp.zoom})`
+          }}
         >
           {/* 网格 */}
           <div
@@ -214,7 +405,7 @@ export function Whiteboard() {
             style={{
               backgroundImage:
                 'linear-gradient(to right, hsl(var(--border) / 0.55) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--border) / 0.55) 1px, transparent 1px)',
-              backgroundSize: `${41 * zoom}px ${41 * zoom}px`
+              backgroundSize: '41px 41px'
             }}
           />
           {/* 中轴 */}
@@ -267,37 +458,19 @@ export function Whiteboard() {
               <div
                 key={t.id}
                 data-board-card={t.id}
-                onPointerDown={(e) => {
-                  if ((e.target as HTMLElement).closest('[data-no-drag]')) return
-                  const canvas = canvasRef.current
-                  if (!canvas) return
-                  ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
-                  dragRef.current = {
-                    id: t.id,
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    ox: live.x,
-                    oy: live.y,
-                    moved: false
-                  }
-                }}
-                onClick={() => {
-                  if (dragRef.current?.moved) return
-                  select(t.id)
-                }}
+                onPointerDown={(e) => startDrag(e, p)}
                 className={cn(
                   'group absolute flex cursor-grab touch-none flex-col gap-1 rounded-lg border bg-card px-2 py-1.5 text-card-foreground shadow-card transition-shadow',
                   'hover:border-border-strong',
                   p.auto && 'border-dashed',
                   selected ? 'border-primary/70 ring-1 ring-primary/30' : 'border-border',
-                  dragging && 'z-30 cursor-grabbing shadow-raised',
-                  completed && 'opacity-55'
+                  dragging && 'z-30 cursor-grabbing shadow-raised'
                 )}
                 style={{
                   width: CARD_W,
                   minHeight: CARD_H,
-                  left: live.x * w,
-                  top: live.y * h,
+                  left: live.x * size.w,
+                  top: live.y * size.h,
                   transform: 'translate(-50%, -50%)',
                   zIndex: selected ? 20 : 1
                 }}
