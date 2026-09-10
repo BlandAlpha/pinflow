@@ -67,6 +67,7 @@ export function createMainWindow(): BrowserWindow {
     y: state?.y,
     frame: false,
     backgroundColor: resolvedTheme() === 'dark' ? '#121316' : '#fafafa',
+    icon: appIcon(),
     show: false,
     autoHideMenuBar: true,
     webPreferences: {

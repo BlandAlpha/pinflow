@@ -8,7 +8,7 @@ directories:
 
 # 仅打包构建产物；生产依赖 (better-sqlite3 等) 由 electron-builder 自动带入
 files:
-  - out/**
+  - app-build/**
   - package.json
 
 # 关闭原生模块重建：本机无 MSVC 工具链，better-sqlite3 直接使用

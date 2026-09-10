@@ -53,8 +53,10 @@ npm run dev            # 启动开发模式（主进程 + 渲染进程热更新�
 ```bash
 npm run typecheck      # TypeScript 类型检查
 npm run test           # 单元测试 (vitest)：优先级评分 + 视图模型
-npm run build          # 构建到 out/
+npm run build          # 构建到 app-build/
 npm run smoke          # 构建 + 自动化冒烟测试（截图输出到 .smoke/）
+npm run package        # 打包免安装版 (forge-dist/win32-x64/TodoTracker.exe)
+npm run make           # 构建并打包 Windows 安装包 (forge-dist/make/ 下的 Squirrel 安装包)
 npm run pack           # 打包免安装版 (release/win-unpacked/TodoTracker.exe)
 npm run dist           # 打包 Windows 安装包 (release/TodoTracker-x.y.z-setup.exe)
 ```

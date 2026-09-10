@@ -12,7 +12,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     resolve: { alias },
     build: {
-      outDir: 'out/main',
+      outDir: 'app-build/main',
       rollupOptions: {
         input: { index: resolve(__dirname, 'electron/main/index.ts') }
       }
@@ -22,7 +22,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     resolve: { alias },
     build: {
-      outDir: 'out/preload',
+      outDir: 'app-build/preload',
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'electron/preload/index.ts'),
@@ -36,7 +36,7 @@ export default defineConfig({
     resolve: { alias },
     plugins: [react()],
     build: {
-      outDir: 'out/renderer',
+      outDir: 'app-build/renderer',
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/index.html'),
