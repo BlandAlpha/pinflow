@@ -10,4 +10,6 @@
 - 设计约定：所有颜色走语义 CSS 变量，禁止在组件里硬编码颜色；默认 System 主题并持久化；主题切换只用图标（跟随系统=日月组合图标），标签仅 浅色/深色/跟随系统。
 - 侧栏三档响应式：>=1240 完整 / >=1040 紧凑(图标+计数) / <1040 仅图标(悬停浮层展开)；底部只放主题切换+设置，开机启动/数据库位置/快捷键收进设置弹窗。
 - 验证手段：`node scripts/png-brightness.mjs .smoke/*.png` 判断截图明暗与是否空白（模型无法直接看图时用它替代）。
+- 冒烟交互校验：`--smoke-interact`（合成指针/滚轮事件验证白板拖拽/缩放/平移/空间切换），结果在 `.smoke/interact.json`。
+- 沙箱构建坑：electron / electron-vite build 必须后台运行，前台会静默无输出；build 前先 `rm -rf app-build`（否则 safe-delete 阈值拦截 emptyDir）；杀 electron 用 PowerShell Stop-Process（Git Bash taskkill 无效）。
 - 遗留清理项：旧 `release/` 目录 223MB（app.asar 被占用无法删除，打包时改用 `-c.directories.output=release-v2`）；`release2/` 为空壳。

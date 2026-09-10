@@ -1,10 +1,8 @@
 node_modules
-out
 dist
-release
-release2
-release-v2
-release-v3
+app-build
+.npmrc
+
 .smoke
 *.log
 .DS_Store
@@ -13,5 +11,5 @@ coverage
 *.tsbuildinfo
 
 .native-cache
-release-v4
-release-v5
+.workbuddy
+forge-dist
