@@ -15,7 +15,14 @@ const OPTIONS: { value: ThemeMode; label: string; Icon: React.ComponentType<{ cl
     { value: 'system', label: '跟随系统', Icon: SunMoon }
   ]
 
-export function ThemeSwitcher({ className }: { className?: string }) {
+export function ThemeSwitcher({
+  className,
+  showLabel = false
+}: {
+  className?: string
+  /** 展开态：图标 + 当前状态文字（浅色 / 深色 / 跟随系统） */
+  showLabel?: boolean
+}) {
   const { mode, setMode } = useTheme()
   const current = OPTIONS.find((o) => o.value === mode) ?? OPTIONS[2]
   const CurrentIcon = current.Icon
@@ -24,11 +31,13 @@ export function ThemeSwitcher({ className }: { className?: string }) {
     <button
       aria-label={`主题：${current.label}`}
       className={cn(
-        'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+        'flex h-7 items-center rounded-md text-[12px] font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+        showLabel ? 'w-full justify-start gap-2 px-2' : 'w-7 justify-center',
         className
       )}
     >
-      <CurrentIcon className="h-4 w-4" />
+      <CurrentIcon className="h-4 w-4 shrink-0" />
+      {showLabel && <span className="truncate">{current.label}</span>}
     </button>
   )
 
@@ -36,7 +45,7 @@ export function ThemeSwitcher({ className }: { className?: string }) {
     <DropdownMenu.DropdownMenu>
       <DropdownMenu.DropdownMenuTrigger asChild>{trigger}</DropdownMenu.DropdownMenuTrigger>
       <DropdownMenu.DropdownMenuContent
-        align="end"
+        align={showLabel ? 'start' : 'end'}
         side="top"
         className="w-36 p-1"
       >
