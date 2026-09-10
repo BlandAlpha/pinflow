@@ -134,6 +134,14 @@
     font-size: 13px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    /* 工具型应用：整页文字不可选中（拖拽不再误选 UI 文案），
+       输入框在下面单独放开 */
+    user-select: none;
+  }
+
+  input,
+  textarea {
+    user-select: text;
   }
 
   ::-webkit-scrollbar {

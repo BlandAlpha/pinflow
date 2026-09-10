@@ -10,7 +10,7 @@ import { ThemeSwitcher } from '@/components/theme/ThemeSwitcher'
 import { SettingsDialog } from '@/components/layout/SettingsDialog'
 import { SpaceSwitcher } from '@/components/layout/SpaceSwitcher'
 
-type SidebarMode = 'full' | 'compact' | 'icon'
+type SidebarMode = 'full' | 'icon'
 
 const NAV: {
   key: ViewKey
@@ -24,7 +24,7 @@ const NAV: {
   { key: 'all', label: '全部任务', icon: ListTree, hint: '搜索、筛选、归档' }
 ]
 
-/** 侧栏宽度自适应：宽窗完整、中等窗紧凑、窄窗图标抽屉（悬停展开） */
+/** 侧栏宽度自适应：宽窗完整、其余仅图标（悬停展开完整抽屉） */
 function useSidebarMode(): SidebarMode {
   const [mode, setMode] = useState<SidebarMode>(() => modeFor(window.innerWidth))
   useEffect(() => {
@@ -37,16 +37,18 @@ function useSidebarMode(): SidebarMode {
 
 function modeFor(width: number): SidebarMode {
   if (width >= 1240) return 'full'
-  if (width >= 1040) return 'compact'
   return 'icon'
 }
 
-const RAIL: Record<SidebarMode, number> = { full: 216, compact: 68, icon: 48 }
+const RAIL: Record<SidebarMode, number> = { full: 216, icon: 48 }
 
 export function Sidebar() {
   const mode = useSidebarMode()
   const [hover, setHover] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // 空间/主题菜单打开期间保持展开：否则鼠标一移进弹出层，侧栏就判定
+  // hover 离开而收起，锚点位移还会把菜单拽走，图标模式下基本没法用
+  const [popupOpen, setPopupOpen] = useState(false)
   const view = useTodos((s) => s.view)
   const setView = useTodos((s) => s.setView)
   const todos = useTodos((s) => s.todos)
@@ -55,7 +57,7 @@ export function Sidebar() {
   const filter = useTodos((s) => s.filter)
   const setFilter = useTodos((s) => s.setFilter)
 
-  const expanded = mode !== 'full' && hover
+  const expanded = mode !== 'full' && (hover || popupOpen)
   const showLabels = mode === 'full' || expanded
 
   // 计数只统计当前空间：空间是硬边界
@@ -138,7 +140,7 @@ export function Sidebar() {
         showLabels ? 'items-stretch' : 'items-center'
       )}
     >
-      <ThemeSwitcher showLabel={showLabels} />
+      <ThemeSwitcher showLabel={showLabels} onOpenChange={setPopupOpen} />
       {showLabels ? (
         <Button
           variant="ghost"
@@ -170,7 +172,11 @@ export function Sidebar() {
 
   const spaceBar = (
     <div className="shrink-0 border-t border-border p-2">
-      <SpaceSwitcher showLabel={showLabels} onManage={() => setSettingsOpen(true)} />
+      <SpaceSwitcher
+        showLabel={showLabels}
+        onManage={() => setSettingsOpen(true)}
+        onOpenChange={setPopupOpen}
+      />
     </div>
   )
 

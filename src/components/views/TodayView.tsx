@@ -128,8 +128,8 @@ function BandCard({
         accent ? 'border-border' : 'border-border/70'
       )}
     >
-      <header className="flex items-center gap-2 border-b border-border/70 bg-muted/30 px-3 py-2">
-        <span className="h-2 w-2 rounded-full" style={{ background: band.dot }} />
+      <header className="flex items-center gap-1.5 border-b border-border/70 bg-muted/30 py-1.5 pl-2 pr-3">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: band.dot }} />
         <h2 className="text-[13.5px] font-semibold tracking-tight">{band.title}</h2>
         <span className="text-2xs text-muted-foreground">{band.hint}</span>
         <span className="ml-auto font-mono text-2xs text-muted-foreground">{todos.length}</span>

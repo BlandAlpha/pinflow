@@ -54,7 +54,8 @@ export function DetailPanel() {
       setNotes(todo.notes)
       setShowMore(false)
     }
-  }, [todo?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    // 只在切换任务时回填输入框，否则编辑中的内容会被 refresh 回写冲掉
+  }, [todo?.id])
 
   if (!todo) return null
 

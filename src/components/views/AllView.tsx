@@ -1,4 +1,5 @@
-import { Search, X } from 'lucide-react'
+import { useState } from 'react'
+import { Archive, ChevronDown, Search, X } from 'lucide-react'
 import type { TodoFilter } from '@shared/types'
 import { useTodos } from '@/store/todos'
 import { useVisibleTodos } from '@/hooks/useVisibleTodos'
@@ -49,6 +50,12 @@ export function AllView() {
 
   const dirty =
     !!filter.keyword || filter.status !== 'all' || !!filter.tag || filter.dueRange !== 'all'
+
+  // 已完成 / 已归档默认折进底部「归档」区；用户明确筛这两个状态时平铺展示
+  const explicitDone = filter.status === 'completed' || filter.status === 'archived'
+  const [foldOpen, setFoldOpen] = useState(false)
+  const mainList = explicitDone ? todos : todos.filter((t) => t.status === 'active')
+  const folded = explicitDone ? [] : todos.filter((t) => t.status !== 'active')
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -120,7 +127,7 @@ export function AllView() {
       ) : (
         <ScrollArea className="flex-1">
           <div className="space-y-px px-1.5 py-1.5">
-            {todos.map((t) => (
+            {mainList.map((t) => (
               <TaskCard
                 key={t.id}
                 todo={t}
@@ -129,6 +136,37 @@ export function AllView() {
                 onOpen={() => select(t.id)}
               />
             ))}
+
+            {folded.length > 0 && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setFoldOpen((v) => !v)}
+                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-2xs text-muted-foreground transition-colors hover:bg-accent"
+                >
+                  <ChevronDown
+                    className={cn('h-3.5 w-3.5 shrink-0 transition-transform', foldOpen && 'rotate-180')}
+                  />
+                  <Archive className="h-3.5 w-3.5 shrink-0" />
+                  <span className="font-medium">归档</span>
+                  <span className="font-mono">{folded.length}</span>
+                  <span className="ml-auto text-muted-foreground/70">完成 / 归档 30 天后自动清除</span>
+                </button>
+                {foldOpen && (
+                  <div className="mt-1 space-y-px">
+                    {folded.map((t) => (
+                      <TaskCard
+                        key={t.id}
+                        todo={t}
+                        variant="list"
+                        selected={selectedId === t.id}
+                        onOpen={() => select(t.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </ScrollArea>
       )}

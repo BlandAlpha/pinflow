@@ -17,11 +17,14 @@ const OPTIONS: { value: ThemeMode; label: string; Icon: React.ComponentType<{ cl
 
 export function ThemeSwitcher({
   className,
-  showLabel = false
+  showLabel = false,
+  onOpenChange
 }: {
   className?: string
   /** 展开态：图标 + 当前状态文字（浅色 / 深色 / 跟随系统） */
   showLabel?: boolean
+  /** 菜单开关上报：图标侧栏在弹层打开期间保持展开 */
+  onOpenChange?: (open: boolean) => void
 }) {
   const { mode, setMode } = useTheme()
   const current = OPTIONS.find((o) => o.value === mode) ?? OPTIONS[2]
@@ -42,7 +45,7 @@ export function ThemeSwitcher({
   )
 
   return (
-    <DropdownMenu.DropdownMenu>
+    <DropdownMenu.DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenu.DropdownMenuTrigger asChild>{trigger}</DropdownMenu.DropdownMenuTrigger>
       <DropdownMenu.DropdownMenuContent
         align={showLabel ? 'start' : 'end'}

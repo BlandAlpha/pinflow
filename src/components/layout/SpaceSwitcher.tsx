@@ -10,10 +10,13 @@ import * as DropdownMenu from '@/components/ui/dropdown-menu'
  */
 export function SpaceSwitcher({
   showLabel = false,
-  onManage
+  onManage,
+  onOpenChange
 }: {
   showLabel?: boolean
   onManage?: () => void
+  /** 菜单开关上报：图标侧栏在弹层打开期间保持展开 */
+  onOpenChange?: (open: boolean) => void
 }) {
   const spaces = useTodos((s) => s.spaces)
   const activeSpaceId = useTodos((s) => s.activeSpaceId)
@@ -46,7 +49,7 @@ export function SpaceSwitcher({
   )
 
   return (
-    <DropdownMenu.DropdownMenu>
+    <DropdownMenu.DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenu.DropdownMenuTrigger asChild>{trigger}</DropdownMenu.DropdownMenuTrigger>
       <DropdownMenu.DropdownMenuContent
         align={showLabel ? 'start' : 'end'}
