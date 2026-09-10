@@ -134,7 +134,7 @@ export function Sidebar() {
         showLabels ? 'items-stretch' : 'items-center'
       )}
     >
-      <ThemeSwitcher stacked={!showLabels} />
+      <ThemeSwitcher />
       {showLabels ? (
         <Button
           variant="ghost"
@@ -170,7 +170,7 @@ export function Sidebar() {
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         className={cn(
-          'absolute inset-y-0 left-0 z-40 flex flex-col overflow-hidden border-r border-border bg-surface-2/60 transition-[width,box-shadow] duration-150 ease-out',
+          'absolute inset-y-0 left-0 z-40 flex flex-col overflow-hidden border-r border-border bg-surface-2/80 backdrop-blur-md transition-[width,box-shadow] duration-150 ease-out',
           expanded && 'shadow-pop'
         )}
         style={{ width: showLabels ? RAIL.full : RAIL[mode] }}

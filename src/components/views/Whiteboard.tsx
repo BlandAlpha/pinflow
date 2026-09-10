@@ -28,10 +28,10 @@ interface Placed {
 }
 
 const CORNER_LABELS: { className: string; text: string }[] = [
-  { className: 'left-3 top-2', text: '紧急 · 重要' },
-  { className: 'right-3 top-2 text-right', text: '重要 · 不紧急' },
-  { className: 'left-3 bottom-2', text: '紧急 · 不重要' },
-  { className: 'right-3 bottom-2 text-right', text: '不紧急 · 不重要' }
+  { className: 'left-3 top-2', text: '重要 · 不紧急' },
+  { className: 'right-3 top-2 text-right', text: '紧急 · 重要' },
+  { className: 'left-3 bottom-2', text: '不紧急 · 不重要' },
+  { className: 'right-3 bottom-2 text-right', text: '紧急 · 不重要' }
 ]
 
 /**
@@ -49,6 +49,7 @@ export function Whiteboard() {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: BOARD_W, h: BOARD_H })
+  const [zoom, setZoom] = useState(1)
   const [draft, setDraft] = useState<{ id: string; x: number; y: number } | null>(null)
   const dragRef = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number; moved: boolean } | null>(
     null
@@ -67,6 +68,20 @@ export function Whiteboard() {
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
+  }, [])
+
+  // Ctrl + 滚轮缩放（像捏合一样直觉）：以光标为中心放大/缩小
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+      setZoom((z) => Math.min(2.6, Math.max(0.5, z * factor)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
   /** 已落点的任务用真实坐标；未落点的由系统自动找空位（可拖拽覆盖） */
@@ -152,15 +167,28 @@ export function Whiteboard() {
 
   const unplacedCount = placed.filter((p) => p.auto).length
 
+  const w = size.w * zoom
+  const h = size.h * zoom
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
         <h1 className="text-[15px] font-semibold tracking-tight">白板</h1>
         <span className="text-2xs text-muted-foreground">
-          上=重要 · 左=紧急，把任务拖到合适的位置
+          上=重要 · 右=紧急，把任务拖到合适的位置
         </span>
         <div className="flex-1" />
         <span className="text-2xs text-muted-foreground">{todos.length} 项</span>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="text-muted-foreground"
+          disabled={zoom === 1}
+          onClick={() => setZoom(1)}
+          title="重置缩放"
+        >
+          {Math.round(zoom * 100)}%
+        </Button>
         <Button
           variant="ghost"
           size="xs"
@@ -178,7 +206,7 @@ export function Whiteboard() {
         <div
           ref={canvasRef}
           className="relative"
-          style={{ width: size.w, height: size.h }}
+          style={{ width: w, height: h }}
         >
           {/* 网格 */}
           <div
@@ -186,7 +214,7 @@ export function Whiteboard() {
             style={{
               backgroundImage:
                 'linear-gradient(to right, hsl(var(--border) / 0.55) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--border) / 0.55) 1px, transparent 1px)',
-              backgroundSize: '41px 41px'
+              backgroundSize: `${41 * zoom}px ${41 * zoom}px`
             }}
           />
           {/* 中轴 */}
@@ -210,6 +238,12 @@ export function Whiteboard() {
           </span>
           <span className="pointer-events-none absolute bottom-1.5 left-1/2 -translate-x-1/2 select-none text-2xs tracking-wide text-muted-foreground/30">
             较不重要 ↓
+          </span>
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 select-none text-2xs tracking-wide text-muted-foreground/30">
+            更紧急 →
+          </span>
+          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 select-none text-2xs tracking-wide text-muted-foreground/30">
+            ← 不紧急
           </span>
 
           {placed.length === 0 && (
@@ -262,8 +296,8 @@ export function Whiteboard() {
                 style={{
                   width: CARD_W,
                   minHeight: CARD_H,
-                  left: live.x * size.w,
-                  top: live.y * size.h,
+                  left: live.x * w,
+                  top: live.y * h,
                   transform: 'translate(-50%, -50%)',
                   zIndex: selected ? 20 : 1
                 }}

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { CalendarDays, ChevronRight, Coffee, Flame, ListChecks, Moon } from 'lucide-react'
+import { CalendarDays, ChevronRight, Coffee, Flame, Moon } from 'lucide-react'
 import type { Todo } from '@shared/types'
 import { useTodos } from '@/store/todos'
 import { useVisibleTodos } from '@/hooks/useVisibleTodos'
@@ -29,9 +29,11 @@ function TodayRow({ todo }: { todo: Todo }) {
   const selectedId = useTodos((s) => s.selectedId)
   const select = useTodos((s) => s.select)
   const toggle = useTodos((s) => s.toggle)
-  const done = todo.steps.filter((s) => s.completed).length
+  const toggleStep = useTodos((s) => s.toggleStep)
   const tone = dueTone(todo)
   const zone = zoneOf(todo)
+  const visibleSteps = todo.steps.slice(0, 3)
+  const hiddenCount = todo.steps.length - visibleSteps.length
 
   return (
     <div
@@ -74,16 +76,35 @@ function TodayRow({ todo }: { todo: Todo }) {
               {formatDue(todo.dueAt)}
             </span>
           )}
-          {todo.steps.length > 0 && (
-            <span className="flex items-center gap-1">
-              <ListChecks className="h-3 w-3" />
-              {done}/{todo.steps.length}
-            </span>
-          )}
           {todo.tags.slice(0, 3).map((tag) => (
             <span key={tag}>#{tag}</span>
           ))}
         </div>
+        {todo.steps.length > 0 && (
+          <ul className="mt-1.5 space-y-1">
+            {visibleSteps.map((s) => (
+              <li key={s.id} className="flex items-center gap-1.5">
+                <Checkbox
+                  className="h-3.5 w-3.5 shrink-0 rounded-sm"
+                  checked={s.completed}
+                  onClick={(e) => e.stopPropagation()}
+                  onCheckedChange={() => void toggleStep(s.id)}
+                />
+                <span
+                  className={cn(
+                    'truncate text-2xs',
+                    s.completed ? 'text-muted-foreground line-through' : 'text-foreground/80'
+                  )}
+                >
+                  {s.title}
+                </span>
+              </li>
+            ))}
+            {hiddenCount > 0 && (
+              <li className="pl-5 text-2xs text-muted-foreground">还有 {hiddenCount} 项…</li>
+            )}
+          </ul>
+        )}
       </div>
       <ChevronRight className="mt-1.5 h-4 w-4 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/50" />
     </div>

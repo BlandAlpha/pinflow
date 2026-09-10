@@ -13,7 +13,7 @@ import { quadrantToLevels } from '@shared/quadrant'
 import { positionForQuadrant, levelsAt } from '@shared/board'
 
 /** 当前 schema 版本，递增时追加迁移步骤 */
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 interface TodoRow {
   id: string
@@ -147,6 +147,10 @@ function migrate(d: Database.Database): void {
       })
     })
     tx(rows)
+  }
+  if (current < 4) {
+    // v4：坐标系改为数学约定（右=紧急、上=重要）。旧数据落在「左=紧急」，整列水平翻转即可。
+    d.exec('UPDATE todos SET board_x = 1 - board_x WHERE board_x IS NOT NULL')
   }
   d.pragma(`user_version = ${SCHEMA_VERSION}`)
 }

@@ -1,11 +1,13 @@
 import type { Level, Quadrant } from './types'
 
 /**
- * 白板坐标系：一块连续的重要性 × 紧急性二维空间。
+ * 白板坐标系：一块连续的重要性 × 紧急性二维空间（数学坐标，右/上为大）。
  *
- *   y = 0（上）  ── 重要          y = 1（下）  ── 不重要
- *   x = 0（左）  ── 紧急          x = 1（右）  ── 不紧急
+ *   y：下 = 0（不重要）  ──► 上 = 1（重要）
+ *   x：左 = 0（不紧急）  ──► 右 = 1（紧急）
  *
+ * 因此：右上 = 紧急 + 重要，右下 = 紧急 + 不重要，
+ *       左上 = 重要 + 不紧急，左下 = 不重要 + 不紧急。
  * 它不是四个桶，而是一片连续空间；象限只是给位置起的方便名字。
  */
 
@@ -31,24 +33,25 @@ export function clampPoint(p: BoardPoint): BoardPoint {
   return { x: clamp01(p.x), y: clamp01(p.y) }
 }
 
-/** 位置 -> 象限编号（仅用于命名与兼容，不改变连续语义） */
+/** 位置 -> 象限编号（仅用于命名与兼容，不改变连续语义）
+ *  右上=Q1(紧急·重要) 左上=Q2(重要·不紧急) 右下=Q3(紧急·不重要) 左下=Q4(不重要·不紧急) */
 export function quadrantAt(p: BoardPoint): Quadrant {
-  const important = p.y < 0.5
-  const urgent = p.x < 0.5
+  const important = p.y < 0.5 // 上=重要
+  const urgent = p.x > 0.5 // 右=紧急
   if (important && urgent) return 1
   if (important && !urgent) return 2
   if (!important && urgent) return 3
   return 4
 }
 
-/** 连续重要度（0..1，越大越重要） */
+/** 连续重要度（0..1，越大越重要，上=大） */
 export function importanceAt(p: BoardPoint): number {
   return clamp01(1 - p.y)
 }
 
-/** 连续紧急度（0..1，越大越紧急） */
+/** 连续紧急度（0..1，越大越紧急，右=大） */
 export function urgencyAt(p: BoardPoint): number {
-  return clamp01(1 - p.x)
+  return clamp01(p.x)
 }
 
 function toLevel(v: number): Level {
@@ -65,17 +68,17 @@ export function levelsAt(p: BoardPoint): { importance: Level; urgency: Level } {
   }
 }
 
-/** 象限中心点：用于把旧数据/快捷键映射到白板位置 */
+/** 象限中心点：用于把旧数据/快捷键映射到白板位置（右上=Q1） */
 export function positionForQuadrant(q: Quadrant): BoardPoint {
   switch (q) {
     case 1:
-      return { x: 0.25, y: 0.25 }
+      return { x: 0.75, y: 0.25 } // 右上：紧急·重要
     case 2:
-      return { x: 0.75, y: 0.25 }
+      return { x: 0.25, y: 0.25 } // 左上：重要·不紧急
     case 3:
-      return { x: 0.25, y: 0.75 }
+      return { x: 0.75, y: 0.75 } // 右下：紧急·不重要
     default:
-      return { x: 0.75, y: 0.75 }
+      return { x: 0.25, y: 0.75 } // 左下：不重要·不紧急
   }
 }
 

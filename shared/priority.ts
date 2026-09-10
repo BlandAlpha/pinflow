@@ -82,14 +82,14 @@ function ageScore(createdAt: string, now: number): number {
 export function explainPriority(todo: Scorable, now: Date = new Date()): ScoreBreakdown {
   const t = now.getTime()
   const inactive = todo.status === 'completed' || todo.status === 'archived'
-  // 放到白板上的任务按连续坐标计分：越靠上越重要、越靠左越紧急
+  // 放到白板上的任务按连续坐标计分：越靠上越重要、越靠右越紧急
   const importance =
     todo.boardY != null
       ? WEIGHTS.importance.high * Math.min(1, Math.max(0, 1 - todo.boardY))
       : WEIGHTS.importance[todo.importance]
   const urgency =
     todo.boardX != null
-      ? WEIGHTS.urgency.high * Math.min(1, Math.max(0, 1 - todo.boardX))
+      ? WEIGHTS.urgency.high * Math.min(1, Math.max(0, todo.boardX))
       : WEIGHTS.urgency[todo.urgency]
   const deadline = deadlineScore(todo.dueAt, t)
   const age = ageScore(todo.createdAt, t)

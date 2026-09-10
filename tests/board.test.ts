@@ -17,22 +17,22 @@ describe('白板坐标系', () => {
     expect(importanceAt({ x: 0.5, y: 1 })).toBe(0)
   })
 
-  it('左=紧急，右=不紧急', () => {
-    expect(urgencyAt({ x: 0, y: 0.5 })).toBeGreaterThan(urgencyAt({ x: 0.5, y: 0.5 }))
-    expect(urgencyAt({ x: 1, y: 0.5 })).toBe(0)
+  it('右=紧急，左=不紧急', () => {
+    expect(urgencyAt({ x: 1, y: 0.5 })).toBeGreaterThan(urgencyAt({ x: 0.5, y: 0.5 }))
+    expect(urgencyAt({ x: 0, y: 0.5 })).toBe(0)
   })
 
-  it('四角对应四个象限', () => {
-    expect(quadrantAt({ x: 0.1, y: 0.1 })).toBe(1)
-    expect(quadrantAt({ x: 0.9, y: 0.1 })).toBe(2)
-    expect(quadrantAt({ x: 0.1, y: 0.9 })).toBe(3)
-    expect(quadrantAt({ x: 0.9, y: 0.9 })).toBe(4)
+  it('四角对应四个象限（右上=紧急·重要）', () => {
+    expect(quadrantAt({ x: 0.9, y: 0.1 })).toBe(1) // 右上
+    expect(quadrantAt({ x: 0.1, y: 0.1 })).toBe(2) // 左上
+    expect(quadrantAt({ x: 0.9, y: 0.9 })).toBe(3) // 右下
+    expect(quadrantAt({ x: 0.1, y: 0.9 })).toBe(4) // 左下
   })
 
-  it('连续坐标映射到离散等级：越靠上/左越高', () => {
-    expect(levelsAt({ x: 0.1, y: 0.1 })).toEqual({ importance: 'high', urgency: 'high' })
+  it('连续坐标映射到离散等级：越靠上越重要、越靠右越紧急', () => {
+    expect(levelsAt({ x: 0.1, y: 0.1 })).toEqual({ importance: 'high', urgency: 'low' })
     expect(levelsAt({ x: 0.5, y: 0.5 })).toEqual({ importance: 'normal', urgency: 'normal' })
-    expect(levelsAt({ x: 0.9, y: 0.9 })).toEqual({ importance: 'low', urgency: 'low' })
+    expect(levelsAt({ x: 0.9, y: 0.9 })).toEqual({ importance: 'low', urgency: 'high' })
   })
 
   it('象限中心点落在该象限内', () => {
@@ -86,7 +86,7 @@ function todo(patch: Partial<Todo> = {}): Todo {
 describe('白板位置参与排序', () => {
   const NOW = new Date('2026-01-10T09:00:00Z')
 
-  it('越靠上越重要、越靠左越紧急，分数越高', () => {
+  it('越靠上越重要、越靠右越紧急，分数越高', () => {
     const topLeft = priorityScore(todo({ boardX: 0.05, boardY: 0.05 }), NOW)
     const middle = priorityScore(todo({ boardX: 0.5, boardY: 0.5 }), NOW)
     const bottomRight = priorityScore(todo({ boardX: 0.95, boardY: 0.95 }), NOW)
