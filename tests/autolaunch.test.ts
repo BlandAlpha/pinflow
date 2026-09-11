@@ -67,10 +67,19 @@ async function load() {
   return await import('../electron/main/autolaunch')
 }
 
+/**
+ * 模块在顶层读 process.platform 决定走哪条实现，所以必须在 import 之前改。
+ * 默认按 Windows 跑（历史用例都是 Windows 语义），macOS 分支单列一组。
+ */
+function setPlatform(p: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', { value: p, configurable: true })
+}
+
 beforeEach(() => {
   native = { openAtLogin: false, args: [] }
   lib = { enabled: false, fail: true, calls: 0 }
   packaged = true
+  setPlatform('win32')
 })
 
 describe('autolaunch（安装版）', () => {
@@ -108,5 +117,26 @@ describe('autolaunch（开发态）', () => {
     expect(lib.calls).toBe(0)
     expect(native).toEqual({ openAtLogin: true, args: [APP_PATH, '--startup'] })
     expect(await getAutoLaunch()).toBe(true)
+  })
+})
+
+describe('autolaunch（macOS）', () => {
+  it('走原生登录项：不碰 electron-auto-launch，也不带 args（改的是系统登录项）', async () => {
+    setPlatform('darwin')
+    const { setAutoLaunch, getAutoLaunch } = await load()
+    expect(await setAutoLaunch(true)).toBe(true)
+    expect(lib.calls).toBe(0)
+    expect(native).toEqual({ openAtLogin: true, args: [] })
+    expect(await getAutoLaunch()).toBe(true)
+    expect(await setAutoLaunch(false)).toBe(false)
+  })
+
+  it('开发态直接拒绝：登录项会指向 node_modules 里的 Electron.app，没有意义', async () => {
+    setPlatform('darwin')
+    packaged = false
+    const { setAutoLaunch } = await load()
+    expect(await setAutoLaunch(true)).toBe(false)
+    expect(native.openAtLogin).toBe(false)
+    expect(lib.calls).toBe(0)
   })
 })
