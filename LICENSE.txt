@@ -43,6 +43,6 @@ TODO TRACKER 最终用户许可协议(EULA)
 本协议的解释、效力及纠纷解决适用中华人民共和国法律。
 版权所有者保留随时修订本协议条款的权利。
 
-如对本协议有任何疑问，请联系: https://github.com/BlandAlpha
+如对本协议有任何疑问，请联系: canisalpha@icloud.com
 
                                             版权所有 (C) 2026 CanisAlpha
