@@ -21,11 +21,20 @@ const VERSION = JSON.parse(
 
 const platform = process.platform
 const arch = process.arch === 'x64' ? 'x64' : process.arch
+/** --force：即使现有二进制在 Electron 里能跑，也重新下载一份 */
+const force = process.argv.includes('--force')
+
+/** Electron 可执行文件路径：macOS 在 .app 包内，Windows 带 .exe 后缀 */
+function electronBinary() {
+  if (platform === 'darwin') {
+    return join(ROOT, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron')
+  }
+  const base = join(ROOT, 'node_modules/electron/dist/electron')
+  return platform === 'win32' ? `${base}.exe` : base
+}
 
 function electronAbi() {
-  const electronPkg = join(ROOT, 'node_modules/electron/package.json')
-  const electronPath = join(ROOT, 'node_modules/electron/dist/electron')
-  const exe = platform === 'win32' ? `${electronPath}.exe` : electronPath
+  const exe = electronBinary()
   if (!existsSync(exe)) throw new Error('未找到 Electron 二进制，请先执行 npm install')
   const out = spawnSync(exe, ['-e', 'process.stdout.write(String(process.versions.modules))'], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
@@ -34,6 +43,32 @@ function electronAbi() {
   const abi = (out.stdout || '').trim()
   if (!abi) throw new Error('无法读取 Electron ABI：' + (out.stderr || ''))
   return abi
+}
+
+/**
+ * 现有的 better_sqlite3.node 能不能在 Electron 里用？
+ *
+ * 必须真的 `new Database(':memory:')` —— 光 require('better-sqlite3') 只加载 JS 外壳，
+ * 原生模块是在构造实例时才 dlopen 的，看不出来 ABI 对不对。
+ * npm install 装出来的是 Node ABI 版本，直接跑 dev 会报 NODE_MODULE_VERSION 不匹配。
+ */
+function nativeUsable() {
+  const probe = spawnSync(
+    electronBinary(),
+    [
+      '-e',
+      "try{const D=require('better-sqlite3');new D(':memory:').close();console.log('OK')}catch(e){console.log('FAIL:'+String(e.message).split('\\n')[0])}"
+    ],
+    {
+      cwd: ROOT,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      encoding: 'utf8'
+    }
+  )
+  const out = (probe.stdout || '').trim()
+  if (out === 'OK') return true
+  console.log('[native] 现有二进制不可用：', out || (probe.stderr || '').trim())
+  return false
 }
 
 const abi = electronAbi()
@@ -57,26 +92,32 @@ function download(url, dest) {
 }
 
 async function main() {
-  if (existsSync(join(releaseDir, 'better_sqlite3.node'))) {
-    console.log('[native] 已存在预编译二进制，跳过')
+  const target = join(releaseDir, 'better_sqlite3.node')
+  // 只看「文件在不在」是不够的：npm install 会用 Node ABI 编一份出来，
+  // 那份文件在 Electron 里根本 dlopen 不了（NODE_MODULE_VERSION 不匹配）
+  if (!force && existsSync(target) && nativeUsable()) {
+    console.log('[native] 已存在可用的（Electron ABI）预编译二进制，跳过')
     return
   }
+  if (force) console.log('[native] --force：忽略现有二进制，强制重新下载')
   let lastErr
   for (const url of targets) {
     try {
       console.log('[native] 下载:', url)
       download(url, tmp)
       mkdirSync(releaseDir, { recursive: true })
-      const r = spawnSync(
-        'tar',
-        ['--force-local', '-xzf', tmp.replace(/\\/g, '/'), '-C', outDir.replace(/\\/g, '/')],
-        { encoding: 'utf8' }
-      )
+      // 覆盖前先清掉旧产物，避免 Node ABI 那份被留在原地
+      rmSync(target, { force: true })
+      // --force-local 是 GNU tar 专有选项（Windows 上避免把 D:\... 当远程主机名），
+      // macOS 自带的 BSD tar 不认它，会直接报 unknown option
+      const tarArgs = ['-xzf', tmp.replace(/\\/g, '/'), '-C', outDir.replace(/\\/g, '/')]
+      if (platform === 'win32') tarArgs.unshift('--force-local')
+      const r = spawnSync('tar', tarArgs, { encoding: 'utf8' })
       if (r.status !== 0) throw new Error('tar 解压失败: ' + r.stderr)
-      if (!existsSync(join(releaseDir, 'better_sqlite3.node'))) {
+      if (!existsSync(target)) {
         throw new Error('压缩包中缺少 better_sqlite3.node')
       }
-      console.log('[native] 完成:', join(releaseDir, 'better_sqlite3.node'))
+      console.log('[native] 完成:', target)
       rmSync(dirname(tmp), { recursive: true, force: true })
       return
     } catch (err) {
