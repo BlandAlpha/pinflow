@@ -13,6 +13,9 @@ import { AllView } from '@/components/views/AllView'
 import { DetailPanel } from '@/components/detail/DetailPanel'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
+/** macOS 的按键命名与 Windows 不同（无 Ctrl、无独立 Delete 键），键盘绑定按平台分叉 */
+const isMac = window.api?.platform === 'darwin'
+
 function Workspace() {
   const init = useTodos((s) => s.init)
   const initialized = useTodos((s) => s.initialized)
@@ -40,13 +43,24 @@ function Workspace() {
       }
       if (isTypingTarget(e.target)) return
 
-      // Alt+1..9：快速切换空间
-      if (e.altKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) {
-        const target = spaces[Number(e.key) - 1]
+      // Alt+1..9（macOS 上是 Option+1..9）：快速切换空间。
+      // 必须用 e.code 判断数字 —— macOS 上 Option 组合会产出特殊字符（Option+1 = ¡），
+      // e.key 根本拿不到 '1'
+      const altDigit = e.altKey && !e.ctrlKey && !e.metaKey ? /^Digit([1-9])$/.exec(e.code) : null
+      if (altDigit) {
+        const target = spaces[Number(altDigit[1]) - 1]
         if (target) {
           e.preventDefault()
           void setActiveSpace(target.id)
         }
+        return
+      }
+
+      // 归档 / 彻底删除：macOS 上没有独立的 Delete 键（Fn+Delete 才有），主删除键就是 Backspace
+      if (e.key === 'Delete' || (isMac && e.key === 'Backspace')) {
+        if (!selectedId) return
+        if (e.shiftKey) void remove(selectedId)
+        else void archive(selectedId)
         return
       }
 
@@ -89,12 +103,6 @@ function Workspace() {
         case '3':
         case '4': {
           if (selectedId) void setQuadrant(selectedId, Number(e.key) as 1 | 2 | 3 | 4)
-          break
-        }
-        case 'Delete': {
-          if (!selectedId) break
-          if (e.shiftKey) void remove(selectedId)
-          else void archive(selectedId)
           break
         }
         default:

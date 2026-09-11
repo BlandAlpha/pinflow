@@ -10,6 +10,15 @@ interface WindowStateFile {
   capture?: { x: number; y: number }
 }
 
+const isMac = process.platform === 'darwin'
+
+/**
+ * macOS 交通灯（红/黄/绿）内边距：
+ * 标题栏高 36px、按钮直径约 12px，纵向居中即 y≈12；左侧留 14px 与系统其它应用对齐。
+ * 渲染层的 TitleBar 会据此在左侧留出等宽空白（见 TitleBar.tsx）。
+ */
+const MAC_TRAFFIC_LIGHT = { x: 14, y: 12 }
+
 let mainWindow: BrowserWindow | null = null
 let captureWindow: BrowserWindow | null = null
 let stateFile = ''
@@ -70,7 +79,12 @@ export function createMainWindow(options: { hidden?: boolean } = {}): BrowserWin
     minHeight: 600,
     x: state?.x,
     y: state?.y,
-    frame: false,
+    // Windows / Linux：完全无边框，标题栏与窗口按钮全部自绘。
+    // macOS：保留原生边框以获得系统交通灯与窗口圆角/阴影，
+    //        再用 hiddenInset 把标题栏让给内容层（拖动区仍是 -webkit-app-region: drag）。
+    frame: isMac,
+    titleBarStyle: isMac ? 'hiddenInset' : undefined,
+    trafficLightPosition: isMac ? MAC_TRAFFIC_LIGHT : undefined,
     backgroundColor: resolvedTheme() === 'dark' ? '#121316' : '#fafafa',
     icon: appIcon(),
     show: false,
@@ -143,6 +157,12 @@ export function createCaptureWindow(): BrowserWindow {
     }
   })
 
+  if (isMac) {
+    // macOS：捕获窗要能压在全屏应用之上，且切到别的桌面（Space）后仍然可见
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    win.setAlwaysOnTop(true, 'floating')
+  }
+
   win.on('blur', () => {
     if (win.isVisible() && !win.webContents.isDevToolsFocused()) hideCaptureWindow()
   })
@@ -190,6 +210,9 @@ export function showCaptureWindow(): void {
 
   win.show()
   win.focus()
+  // macOS：应用未激活时 show() 只把窗口排到前面但不给焦点，必须显式激活，
+  // 否则输入框拿不到键盘（表现为「按了快捷键，窗口出来了却打不了字」）
+  if (isMac) app.focus({ steal: true })
   sendWhenReady(win, IPC.CAPTURE_READY)
 }
 
