@@ -78,7 +78,11 @@ if (!singleInstance) {
     }
 
     // 5. 主窗口（开机自启时静默到托盘，不弹首帧）
-    createMainWindow({ hidden: process.argv.includes('--startup') })
+    //    --startup 是 Windows 原生自启项的参数，--hidden 是 electron-auto-launch
+    //    （isHidden: true）在 macOS / Linux 上写入的参数
+    createMainWindow({
+      hidden: process.argv.includes('--startup') || process.argv.includes('--hidden')
+    })
 
     // 6. 冒烟测试：--smoke 启动时自动截图并退出。
     //    只在未打包时加载：它会往 app.getAppPath()/.smoke 写文件，

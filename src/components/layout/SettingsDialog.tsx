@@ -72,8 +72,10 @@ export function SettingsDialog({
               <Checkbox
                 checked={autoStart}
                 onCheckedChange={(v) => {
-                  setAutoStart(v === true)
-                  void window.api.setAutoLaunch(v === true)
+                  const next = v === true
+                  setAutoStart(next)
+                  // 以主进程返回的实际状态为准：写失败时复选框自动回滚
+                  void window.api.setAutoLaunch(next).then(setAutoStart)
                 }}
               />
             </Row>

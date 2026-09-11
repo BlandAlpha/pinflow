@@ -19,6 +19,7 @@ import {
   setActiveSpace,
   setTheme
 } from './prefs'
+import { getAutoLaunch, setAutoLaunch } from './autolaunch'
 
 /** preload 首帧同步读取的主题快照 */
 export interface ThemeSnapshot {
@@ -191,9 +192,7 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.APP_WIN_MAX, (): void => toggleMaximizeMainWindow())
   ipcMain.handle(IPC.APP_WIN_CLOSE, (): void => closeMainWindow())
-  ipcMain.handle(IPC.APP_GET_AUTO_LAUNCH, (): boolean => {
-    return app.getLoginItemSettings().openAtLogin
-  })
+  ipcMain.handle(IPC.APP_GET_AUTO_LAUNCH, (): Promise<boolean> => getAutoLaunch())
   // 同步通道：preload 在首帧前拿到主题，避免主题闪烁
   ipcMain.on('app:theme:sync', (e) => {
     e.returnValue = { mode: getPrefs().theme, resolved: resolvedTheme() } as ThemeSnapshot
@@ -208,13 +207,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.APP_SET_ACTIVE_SPACE, (_e, id: string | null): AppPrefs =>
     setActiveSpace(id)
   )
-  ipcMain.handle(IPC.APP_SET_AUTO_LAUNCH, (_e, enabled: boolean): boolean => {
-    app.setLoginItemSettings({
-      openAtLogin: enabled,
-      args: ['--startup']
-    })
-    return app.getLoginItemSettings().openAtLogin
-  })
+  ipcMain.handle(
+    IPC.APP_SET_AUTO_LAUNCH,
+    (_e, enabled: boolean): Promise<boolean> => setAutoLaunch(enabled)
+  )
 
   /* ---------- 快速捕获窗口 ---------- */
   ipcMain.handle(IPC.CAPTURE_SUBMIT, (_e, title: string): void => {
