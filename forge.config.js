@@ -8,6 +8,9 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 // 装出来的包其它功能都正常，只是「检查更新」会连不上。
 const UPDATE_BASE_URL = process.env.UPDATE_BASE_URL || 'https://dl.example.com/todo-tracker'
 
+// 打包参数是静态对象，平台差异（图标格式、bundle id、产品名）在这里一次性算好
+const isMac = process.platform === 'darwin'
+
 module.exports = {
   // Forge 的打包逻辑会硬编码忽略项目根下的 /out/ 目录，
   // 因此本项目把 electron-vite 的构建产物输出到 app-build/，避开该忽略规则。
@@ -19,9 +22,15 @@ module.exports = {
   outDir: process.env.FORGE_OUT_DIR || 'forge-dist',
   packagerConfig: {
     asar: true,
-    // exe 文件本身的图标（Windows 必须是 .ico）；不配则 exe 用 Electron 默认图标。
-    // maker-squirrel 的 setupIcon 只管安装包图标，与此互不替代。
-    icon: './resources/icon.ico',
+    // 产品名：macOS 上用带空格的显示名（决定 .app 包名、菜单栏第一项与 userData 目录），
+    // Windows / Linux 保持短横线形式，免安装版路径与 CI 收集逻辑不受影响
+    name: isMac ? 'Todo Tracker' : 'todo-tracker',
+    // macOS 必需：通知、登录项、系统设置里的应用标识都靠它
+    appBundleId: 'com.canisalpha.todo-tracker',
+    appCategoryType: 'public.app-category.productivity',
+    // 图标格式各平台互不通用：Windows 只认 .ico，macOS 只认 .icns
+    // （.icns 由 scripts/make-icons.mjs 在 macOS 上生成，非 mac 平台打包 mac 版会缺图标）
+    icon: isMac ? './resources/icon.icns' : './resources/icon.ico',
     // 把 resources/ 复制进 <app>/resources/resources/，供运行时读取
     // （windows.ts 里 process.resourcesPath/resources/icon.png、tray.png 的路径约定）
     //
@@ -48,7 +57,11 @@ module.exports = {
     {
       // 向导式安装（NSIS）：有许可页 + 可选安装目录，替代 Squirrel 的静默安装。
       // 底层为 electron-builder 的 app-builder NSIS 引擎。
+      //
+      // platforms 必须显式限定：Forge 对没写 platforms 的 maker 视为「支持所有平台」，
+      // 于是在 macOS / Linux 上跑 npm run make 也会去启动 NSIS 引擎，然后必然失败。
       name: '@felixrieseberg/electron-forge-maker-nsis',
+      platforms: ['win32'],
       config: {
         // 应用内更新：这个 maker 会据此生成两份文件
         // 1) 打进包里的 resources/app-update.yml（provider / url / channel）
@@ -98,15 +111,18 @@ module.exports = {
       },
     },
     {
+      // macOS 分发产物：Todo Tracker.app 的 zip 包（未签名，首次打开需右键 → 打开）
       name: '@electron-forge/maker-zip',
       platforms: ['darwin'],
     },
     {
       name: '@electron-forge/maker-deb',
+      platforms: ['linux'],
       config: {},
     },
     {
       name: '@electron-forge/maker-rpm',
+      platforms: ['linux'],
       config: {},
     },
   ],

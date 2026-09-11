@@ -1,9 +1,16 @@
 /**
  * 生成应用图标（纯 Node 实现，无第三方依赖）
- * 输出：resources/tray.png (64x64)、resources/icon.png (256x256)、resources/icon.ico (256x256)
+ *
+ * 输出：
+ *   resources/icon.png              256x256（窗口图标 / Linux）
+ *   resources/icon.ico              多尺寸（Windows exe 与 NSIS 安装包）
+ *   resources/icon.icns             macOS 应用图标（仅 macOS 上生成，系统 iconutil 转档）
+ *   resources/tray.png              64x64 彩色托盘图（Windows / Linux）
+ *   resources/trayTemplate.png/@2x  18/36 模板托盘图（macOS 菜单栏，纯黑 + alpha，由系统着色）
  */
+import { spawnSync } from 'node:child_process'
 import { deflateSync } from 'node:zlib'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -79,12 +86,12 @@ function distToSegment(px, py, ax, ay, bx, by) {
 }
 
 /** 生成图标像素：靛蓝圆角方块 + 白色对勾 */
-function paint(size) {
+function paint(size, { insetRatio = 0.03, radiusRatio = 0.24 } = {}) {
   const buf = Buffer.alloc(size * size * 4)
   const s = size
-  const inset = s * 0.03
+  const inset = s * insetRatio
   const boxSize = s - inset * 2
-  const radius = s * 0.24
+  const radius = s * radiusRatio
   const thick = s * 0.085
 
   const pts = [
@@ -162,5 +169,68 @@ const icoEntries = ICO_SIZES.map((size) => ({
 writeFileSync(join(OUT_DIR, 'icon.png'), icon256)
 writeFileSync(join(OUT_DIR, 'icon.ico'), makeIco(icoEntries))
 writeFileSync(join(OUT_DIR, 'tray.png'), tray64)
+
+/* -------------------- macOS：菜单栏模板图 + .icns -------------------- */
+
+/**
+ * 菜单栏模板图：只取 alpha（RGB 必须是黑），macOS 会按菜单栏深浅色自己着色，
+ * 所以不能像 tray.png 那样带靛蓝底色。文件名带 @2x 的会被系统在 Retina 屏自动取用。
+ */
+function paintTemplate(size) {
+  const buf = Buffer.alloc(size * size * 4)
+  const thick = size * 0.115
+  const pts = [
+    [0.14, 0.52],
+    [0.40, 0.78],
+    [0.87, 0.22]
+  ].map(([x, y]) => [x * size, y * size])
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4
+      const d1 = distToSegment(x + 0.5, y + 0.5, pts[0][0], pts[0][1], pts[1][0], pts[1][1])
+      const d2 = distToSegment(x + 0.5, y + 0.5, pts[1][0], pts[1][1], pts[2][0], pts[2][1])
+      const mark = Math.max(0, 1 - (Math.min(d1, d2) - thick / 2))
+      buf[i + 3] = Math.round(255 * Math.min(1, mark))
+    }
+  }
+  return buf
+}
+
+writeFileSync(join(OUT_DIR, 'trayTemplate.png'), encodePng(18, 18, paintTemplate(18)))
+writeFileSync(join(OUT_DIR, 'trayTemplate@2x.png'), encodePng(36, 36, paintTemplate(36)))
+
+/**
+ * .icns 只能在 macOS 上生成（依赖系统自带的 iconutil）。
+ * 与 Windows 图标不同，macOS 的 app 图标要按规范留出四周空白（内容约占 82%）。
+ */
+if (process.platform === 'darwin') {
+  const MAC_ICON = { insetRatio: 0.085, radiusRatio: 0.225 }
+  const ICNS_ENTRIES = [
+    [16, 'icon_16x16.png'],
+    [32, 'icon_16x16@2x.png'],
+    [32, 'icon_32x32.png'],
+    [64, 'icon_32x32@2x.png'],
+    [128, 'icon_128x128.png'],
+    [256, 'icon_128x128@2x.png'],
+    [256, 'icon_256x256.png'],
+    [512, 'icon_256x256@2x.png'],
+    [512, 'icon_512x512.png'],
+    [1024, 'icon_512x512@2x.png']
+  ]
+  const setDir = join(OUT_DIR, 'icon.iconset')
+  rmSync(setDir, { recursive: true, force: true })
+  mkdirSync(setDir, { recursive: true })
+  for (const [size, name] of ICNS_ENTRIES) {
+    writeFileSync(join(setDir, name), encodePng(size, size, paint(size, MAC_ICON)))
+  }
+  const r = spawnSync('iconutil', ['-c', 'icns', setDir, '-o', join(OUT_DIR, 'icon.icns')], {
+    encoding: 'utf8'
+  })
+  rmSync(setDir, { recursive: true, force: true })
+  if (r.status === 0) console.log('icon.icns written')
+  else console.warn('[icons] iconutil 生成 .icns 失败:', r.stderr || r.error?.message)
+} else {
+  console.log('非 macOS：跳过 icon.icns（打包 macOS 版请在 mac 上执行本脚本）')
+}
 
 console.log('icons written to', OUT_DIR)

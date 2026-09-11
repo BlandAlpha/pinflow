@@ -7,7 +7,13 @@ on:
 
 jobs:
   verify:
-    runs-on: windows-latest
+    # 两个平台都跑一遍：原生模块（better-sqlite3）、图标生成（iconutil）、
+    # 打包配置的平台分支在 mac 上走的都是不同代码路径
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
