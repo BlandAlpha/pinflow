@@ -5,12 +5,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * 1. Electron 的 getLoginItemSettings 会用 args 做比对，写入带 --startup 时，
  *    不带 args 读会返回 false（曾导致"勾上再打开又不勾"）。
  * 2. Windows 上 electron-auto-launch 需要管理员（写 HKLM），失败时必须回退到原生接口。
+ * 3. 开发态不能用库：库只写 electron.exe 而不带应用目录，开机会弹 Electron 欢迎页。
  */
 
 type NativeState = { openAtLogin: boolean; args: string[] }
 
 let native: NativeState = { openAtLogin: false, args: [] }
-let lib = { enabled: false, fail: true }
+let lib = { enabled: false, fail: true, calls: 0 }
+let packaged = true
+
+const APP_PATH = 'C:\\proj\\todo-tracker'
+const STARTUP_ARGS = ['--startup']
 
 function sameArgs(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i])
@@ -19,7 +24,11 @@ function sameArgs(a: string[], b: string[]): boolean {
 vi.mock('electron', () => ({
   app: {
     getName: () => 'todo-tracker',
-    getPath: () => 'C:\\tmp\\todo-tracker.exe',
+    getPath: () => 'C:\\proj\\todo-tracker.exe',
+    getAppPath: () => APP_PATH,
+    get isPackaged() {
+      return packaged
+    },
     // 复刻 Electron 行为：args 与注册表里的命令不一致时判为未启用
     getLoginItemSettings: (opts?: { args?: string[] }) => ({
       openAtLogin: native.openAtLogin && sameArgs(opts?.args ?? [], native.args)
@@ -35,6 +44,7 @@ vi.mock('electron-auto-launch', () => ({
   default: class {
     constructor(public opts: unknown) {}
     private guard(): void {
+      lib.calls += 1
       if (lib.fail) throw new Error('EPERM')
     }
     async enable(): Promise<void> {
@@ -59,14 +69,15 @@ async function load() {
 
 beforeEach(() => {
   native = { openAtLogin: false, args: [] }
-  lib = { enabled: false, fail: true }
+  lib = { enabled: false, fail: true, calls: 0 }
+  packaged = true
 })
 
-describe('autolaunch', () => {
+describe('autolaunch（安装版）', () => {
   it('库不可用时回退原生接口，且回读为已启用（args 必须一致）', async () => {
     const { setAutoLaunch, getAutoLaunch } = await load()
     expect(await setAutoLaunch(true)).toBe(true)
-    expect(native).toEqual({ openAtLogin: true, args: ['--startup'] })
+    expect(native).toEqual({ openAtLogin: true, args: STARTUP_ARGS })
     expect(await getAutoLaunch()).toBe(true)
   })
 
@@ -80,9 +91,22 @@ describe('autolaunch', () => {
 
   it('库写入成功时清掉原生项，避免登录被启动两次', async () => {
     lib.fail = false
-    const { setAutoLaunch } = await load()
-    native = { openAtLogin: true, args: ['--startup'] }
+    const { setAutoLaunch, getAutoLaunch } = await load()
+    native = { openAtLogin: true, args: STARTUP_ARGS }
     expect(await setAutoLaunch(true)).toBe(true)
     expect(native.openAtLogin).toBe(false)
+    expect(lib.enabled).toBe(true)
+    expect(await getAutoLaunch()).toBe(true)
+  })
+})
+
+describe('autolaunch（开发态）', () => {
+  it('不使用库，并把应用目录写进 args（否则开机会弹 Electron 欢迎页）', async () => {
+    packaged = false
+    const { setAutoLaunch, getAutoLaunch } = await load()
+    expect(await setAutoLaunch(true)).toBe(true)
+    expect(lib.calls).toBe(0)
+    expect(native).toEqual({ openAtLogin: true, args: [APP_PATH, '--startup'] })
+    expect(await getAutoLaunch()).toBe(true)
   })
 })
