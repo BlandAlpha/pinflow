@@ -163,9 +163,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist-mac
-          # 路径形如 forge-dist/make/zip/darwin/<arch>/<name>-darwin-<arch>-<version>.zip
-          # 用通配符是为了不依赖 runner 架构（arm64 / x64）
-          cp forge-dist/make/zip/darwin/*/*.zip dist-mac/
+          # 产物路径：forge-dist/make/zip/darwin/<arch>/Todo Tracker-darwin-<arch>-<version>.zip
+          # 通配符是为了不依赖 runner 架构（arm64 / x64）
+          #
+          # 改名去掉空格：macOS 产品名是 "Todo Tracker"，zip maker 直接拿它当文件名，
+          # 放到 R2 上 URL 会变成 %20 —— 与 NSIS 那边「安装包名去空格」是同一个理由
+          VERSION=$(node -p "require('./package.json').version")
+          for f in forge-dist/make/zip/darwin/*/*.zip; do
+            ARCH=$(basename "$(dirname "$f")")
+            cp "$f" "dist-mac/todo-tracker-${VERSION}-mac-${ARCH}.zip"
+          done
           echo "--- 产物 ---"
           ls -lh dist-mac/
           test -n "$(ls dist-mac/*.zip 2>/dev/null)" || { echo "::error::未找到 macOS 应用包"; exit 1; }
