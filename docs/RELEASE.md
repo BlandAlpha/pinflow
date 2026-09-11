@@ -62,8 +62,8 @@ git push --follow-tags     # 触发 CI 发布
 ### 3.1 建私有仓库并推上去
 
 ```bash
-cd "D:/leo/TODO Tracker"
-git remote add origin git@github.com:<你的账号>/todo-tracker.git
+cd "D:/leo/PinFlow"
+git remote add origin git@github.com:<你的账号>/pinflow.git
 git push -u origin master
 ```
 
@@ -72,15 +72,15 @@ git push -u origin master
 1. Cloudflare 控制台 → **R2** → 创建存储桶（名字如 `todo-dl`）。
    开通 R2 需要绑一张卡，但在免费额度内不扣费：**存储 10 GB/月、出站流量永久免费无限**。
 2. 桶 → **Settings** → **Public access** → 绑定你的域名，得到形如
-   `https://dl.你的域名.com` 的地址（这一步不用备案域名，Cloudflare 会自动发证书）。
+   `https://pfdl.canis-alpha.com` 的地址（这一步不用备案域名，Cloudflare 会自动发证书）。
 3. 桶 → **Settings** → **API Tokens** → 创建 R2 API Token，
    权限选 **Object Read & Write**，记下 `Access Key ID` / `Secret Access Key`
    和账号 ID（控制台 R2 概览页右侧 Account ID）。
 4. 把 `UPDATE_BASE_URL` 定为桶的**根地址**，客户端会去拉 `${UPDATE_BASE_URL}/latest.yml`。
-   例如 `https://dl.你的域名.com`。
+   例如 `https://pfdl.canis-alpha.com`。
 
 > 92 MB 安装包在 10 GB 免费存储下约可存 **100 个历史版本**，不用急着清理。
-> 需要腾空间时删掉旧的 `todo-tracker-<版本>-setup.exe` 与同名 `.blockmap` 即可，
+> 需要腾空间时删掉旧的 `pinflow-<版本>-setup.exe` 与同名 `.blockmap` 即可，
 > 当前版本对应的两个文件（以及 `latest.yml`）**不能删**。
 
 ### 3.3 在 GitHub 配好变量与密钥
@@ -89,7 +89,7 @@ git push -u origin master
 
 | 类型 | 名称 | 值 |
 | --- | --- | --- |
-| Variables | `UPDATE_BASE_URL` | `https://dl.你的域名.com`（R2 绑定的域名，**结尾不要带 `/`**） |
+| Variables | `UPDATE_BASE_URL` | `https://pfdl.canis-alpha.com`（R2 绑定的域名，**结尾不要带 `/`**） |
 | Variables | `R2_BUCKET` | 桶名，如 `todo-dl` |
 | Secrets | `R2_ACCOUNT_ID` | Cloudflare 账号 ID |
 | Secrets | `R2_ACCESS_KEY_ID` | R2 API Token 的 Access Key ID |
@@ -174,7 +174,7 @@ Actions → Release → **Run workflow**（workflow_dispatch）：
   接入点已经留好：`forge.config.js` 的 nsis maker 支持 `config.codesign`
   （`certificateFile` + `certificatePassword`），并在生成 `app-update.yml` 时传 `publisherName`
   —— 注意**设了 `publisherName` 就会强制校验签名**，必须与签名一起开。
-- **macOS 分发**：`npm run make` 已能在 mac 上产出 `Todo Tracker.app` 的 zip（maker-zip，
+- **macOS 分发**：`npm run make` 已能在 mac 上产出 `PinFlow.app` 的 zip（maker-zip，
   `platforms: ['darwin']`；未签名，首次打开需「右键 → 打开」）。要做到应用内更新（`latest-mac.yml`）
   与免提示安装，需要 Apple 开发者证书签名 + 公证，再把 macOS 的构建 job 并入本发布流程。
 - **Linux 分发**：`forge.config.js` 里 deb / rpm maker 已限定 `platforms: ['linux']`，

@@ -31,7 +31,7 @@ export function TitleBar() {
       }}
     >
       <AppIcon className="h-[15px] w-[15px]" />
-      <span className="text-2xs font-medium tracking-wide text-foreground/70">Todo Tracker</span>
+      <span className="text-2xs font-medium tracking-wide text-foreground/70">PinFlow</span>
       <span className="text-2xs text-muted-foreground/60">/ {VIEW_TITLES[view]}</span>
 
       <div className="flex-1" />

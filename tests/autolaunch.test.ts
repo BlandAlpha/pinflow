@@ -14,7 +14,7 @@ let native: NativeState = { openAtLogin: false, args: [] }
 let lib = { enabled: false, fail: true, calls: 0 }
 let packaged = true
 
-const APP_PATH = 'C:\\proj\\todo-tracker'
+const APP_PATH = 'C:\\proj\\pinflow'
 const STARTUP_ARGS = ['--startup']
 
 function sameArgs(a: string[], b: string[]): boolean {
@@ -23,8 +23,8 @@ function sameArgs(a: string[], b: string[]): boolean {
 
 vi.mock('electron', () => ({
   app: {
-    getName: () => 'todo-tracker',
-    getPath: () => 'C:\\proj\\todo-tracker.exe',
+    getName: () => 'pinflow',
+    getPath: () => 'C:\\proj\\pinflow.exe',
     getAppPath: () => APP_PATH,
     get isPackaged() {
       return packaged

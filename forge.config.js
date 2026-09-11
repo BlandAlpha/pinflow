@@ -6,7 +6,7 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 // 它被写进随包分发的 resources/app-update.yml，运行时不可改，所以必须构建时定。
 // CI 里由仓库变量 UPDATE_BASE_URL 注入；本地打包不设就落到占位值，
 // 装出来的包其它功能都正常，只是「检查更新」会连不上。
-const UPDATE_BASE_URL = process.env.UPDATE_BASE_URL || 'https://dl.example.com/todo-tracker'
+const UPDATE_BASE_URL = process.env.UPDATE_BASE_URL || 'https://dl.example.com/pinflow'
 
 // 打包参数是静态对象，平台差异（图标格式、bundle id、产品名）在这里一次性算好
 const isMac = process.platform === 'darwin'
@@ -24,9 +24,9 @@ module.exports = {
     asar: true,
     // 产品名：macOS 上用带空格的显示名（决定 .app 包名、菜单栏第一项与 userData 目录），
     // Windows / Linux 保持短横线形式，免安装版路径与 CI 收集逻辑不受影响
-    name: isMac ? 'Todo Tracker' : 'todo-tracker',
+    name: isMac ? 'PinFlow' : 'pinflow',
     // macOS 必需：通知、登录项、系统设置里的应用标识都靠它
-    appBundleId: 'com.canisalpha.todo-tracker',
+    appBundleId: 'com.canisalpha.pinflow',
     appCategoryType: 'public.app-category.productivity',
     // 图标格式各平台互不通用：Windows 只认 .ico，macOS 只认 .icns
     // （.icns 由 scripts/make-icons.mjs 在 macOS 上生成，非 mac 平台打包 mac 版会缺图标）
@@ -71,15 +71,15 @@ module.exports = {
         // 而我们暂未签名，会导致更新被拒。
         updater: {
           url: UPDATE_BASE_URL,
-          name: 'Todo Tracker',
+          name: 'PinFlow',
           channel: 'latest',
-          updaterCacheDirName: 'todo-tracker-updater',
+          updaterCacheDirName: 'pinflow-updater',
         },
         // 必须用函数形式返回（maker 以 getAppBuilderConfig() 取值）
         getAppBuilderConfig: () => ({
           // 安装包名去空格：latest.yml 里的 url 会被客户端按 URL 使用，
           // 「Setup 0.1.0.exe」带空格和点号容易在各类代理/网关处出岔子。
-          artifactName: 'todo-tracker-${version}-setup.${ext}',
+          artifactName: 'pinflow-${version}-setup.${ext}',
           // 必须显式声明 publish：不声明时 electron-builder 在 CI 环境会自动套用
           // 「onTagOrDraft」策略，进而去推断 GitHub publisher，缺少 GH_TOKEN 就直接抛错中断构建。
           //
@@ -114,8 +114,8 @@ module.exports = {
             allowElevation: true,
             createDesktopShortcut: true,
             createStartMenuShortcut: true,
-            shortcutName: 'Todo Tracker',
-            uninstallDisplayName: 'Todo Tracker',
+            shortcutName: 'PinFlow',
+            uninstallDisplayName: 'PinFlow',
             // 卸载时保留用户数据：任务都在本地库里，不能跟着卸载一起没了
             deleteAppDataOnUninstall: false,
             displayLanguageSelector: false,
@@ -124,7 +124,7 @@ module.exports = {
       },
     },
     {
-      // macOS 分发产物：Todo Tracker.app 的 zip 包（未签名，首次打开需右键 → 打开）
+      // macOS 分发产物：PinFlow.app 的 zip 包（未签名，首次打开需右键 → 打开）
       name: '@electron-forge/maker-zip',
       platforms: ['darwin'],
     },

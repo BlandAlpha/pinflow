@@ -1,4 +1,4 @@
-# Todo Tracker
+# PinFlow
 
 本地优先的桌面 Todo 管理器（Windows / macOS）：全局快速捕获 → 系统自动组织 → 你只在需要时纠正。
 
@@ -63,7 +63,7 @@ npm run typecheck      # TypeScript 类型检查（src + shared + electron + tes
 npm run test           # 单元测试 (vitest)：优先级评分 + 视图模型 + 白板坐标 + db
 npm run build          # 构建到 app-build/
 npm run smoke          # 构建 + 自动化冒烟测试（截图输出到 .smoke/）
-npm run package        # 打包免安装版 (forge-dist/todo-tracker-win32-x64/todo-tracker.exe)
+npm run package        # 打包免安装版 (forge-dist/pinflow-win32-x64/pinflow.exe)
 npm run make           # 构建并打包 NSIS 安装向导 (forge-dist/make/nsis/make/)
 ```
 
@@ -104,8 +104,8 @@ SQLite 数据库：`todo.db`（含 WAL 日志文件）；偏好（主题、当�
 
 | 平台 | 目录 | 说明 |
 | --- | --- | --- |
-| Windows | `%APPDATA%/todo-tracker/` | 产品名 `todo-tracker` |
-| macOS | `~/Library/Application Support/Todo Tracker/` | 产品名 `Todo Tracker`（mac 惯例带空格） |
+| Windows | `%APPDATA%/pinflow/` | 产品名 `pinflow` |
+| macOS | `~/Library/Application Support/PinFlow/` | 产品名 `PinFlow`（mac 惯例带空格） |
 
 界面内可通过设置里的「数据库位置」按钮直接打开所在目录。
 
@@ -199,8 +199,8 @@ src/                  渲染进程 (React)
 npm run build      # 只构建：产物在 app-build/（main / preload / renderer）
 npm run package    # 构建 + 免安装版：forge-dist/<产品名>-<平台>-<arch>/ 内的可执行文件
 npm run make       # 构建 + 分发包（maker 按当前平台自动筛）：
-                   #   Windows → forge-dist/make/nsis/make/todo-tracker-<版本>-setup.exe
-                   #   macOS   → forge-dist/make/zip/darwin/<arch>/Todo Tracker-darwin-<arch>-<版本>.zip
+                   #   Windows → forge-dist/make/nsis/make/pinflow-<版本>-setup.exe
+                   #   macOS   → forge-dist/make/zip/darwin/<arch>/PinFlow-darwin-<arch>-<版本>.zip
 ```
 
 打包走 Electron Forge（`forge.config.js`）：
@@ -210,7 +210,7 @@ npm run make       # 构建 + 分发包（maker 按当前平台自动筛）：
 - `plugin-fuses` —— 关闭 `RunAsNode` / Node CLI 参数、开启 asar 完整性校验（打包期固化，不依赖签名）。
 - NSIS 向导式安装（`@felixrieseberg/electron-forge-maker-nsis`，`platforms: ['win32']`）：
   中文向导 + 许可页 + 可选安装目录；仅当前用户安装（不需要管理员），卸载时**保留用户数据**。
-- macOS 分发用 `maker-zip`（`platforms: ['darwin']`），产出 `Todo Tracker.app` 的压缩包；
+- macOS 分发用 `maker-zip`（`platforms: ['darwin']`），产出 `PinFlow.app` 的压缩包；
   maker 的 `platforms` 必须显式写，否则在 mac 上跑 `make` 也会去拉 NSIS 引擎然后失败。
 - `updater` 配置 —— 同时生成随包分发的 `resources/app-update.yml` 与安装包旁的 `latest.yml`，
   这两份文件是应用内更新的依据（详见下文）。

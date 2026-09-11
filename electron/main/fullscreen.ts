@@ -105,7 +105,7 @@ function start(onChange: (fullscreen: boolean) => void): void {
       { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }
     )
   } catch (err) {
-    console.warn('[TodoTracker] 全屏检测启动失败（快捷键屏蔽功能不可用）:', err)
+    console.warn('[PinFlow] 全屏检测启动失败（快捷键屏蔽功能不可用）:', err)
     child = null
     return
   }
@@ -123,18 +123,18 @@ function start(onChange: (fullscreen: boolean) => void): void {
     }
   })
   child.on('error', (err) => {
-    console.warn('[TodoTracker] 全屏检测进程异常:', err)
+    console.warn('[PinFlow] 全屏检测进程异常:', err)
   })
   child.on('exit', (code) => {
     child = null
     setFullscreen(false)
     if (disposed) return
     if (restarts >= MAX_RESTARTS) {
-      console.warn('[TodoTracker] 全屏检测多次失败，已停用（快捷键不再自动屏蔽）')
+      console.warn('[PinFlow] 全屏检测多次失败，已停用（快捷键不再自动屏蔽）')
       return
     }
     restarts += 1
-    console.warn(`[TodoTracker] 全屏检测进程退出（code=${code}），${RESTART_DELAY_MS / 1000}s 后重试`)
+    console.warn(`[PinFlow] 全屏检测进程退出（code=${code}），${RESTART_DELAY_MS / 1000}s 后重试`)
     restartTimer = setTimeout(() => {
       restartTimer = null
       if (notify) start(notify)

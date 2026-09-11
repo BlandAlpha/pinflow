@@ -46,7 +46,7 @@ export function syncShortcut(): boolean {
   if (want && !registered) {
     registered = globalShortcut.register(CAPTURE_SHORTCUT_ACCEL, () => trigger?.())
     if (!registered) {
-      console.warn(`[TodoTracker] 全局快捷键注册失败（可能被其它程序占用）: ${CAPTURE_SHORTCUT}`)
+      console.warn(`[PinFlow] 全局快捷键注册失败（可能被其它程序占用）: ${CAPTURE_SHORTCUT}`)
     }
   } else if (!want && registered) {
     globalShortcut.unregister(CAPTURE_SHORTCUT_ACCEL)

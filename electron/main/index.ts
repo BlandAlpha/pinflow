@@ -51,7 +51,7 @@ if (!singleInstance) {
     const purge = () => {
       const removed = purgeExpiredArchived(30)
       if (removed > 0) {
-        console.info(`[TodoTracker] 已自动清除 ${removed} 个超过 30 天的归档任务`)
+        console.info(`[PinFlow] 已自动清除 ${removed} 个超过 30 天的归档任务`)
         broadcastDataChanged()
       }
     }
@@ -104,8 +104,8 @@ if (!singleInstance) {
       message +=
         '\n\n原生模块与 Electron 的 ABI 不一致。执行 `node scripts/fetch-native.mjs` 重新获取与 Electron 匹配的预编译产物后再启动。'
     }
-    console.error('[TodoTracker] 启动失败:', err)
-    dialog.showErrorBox('Todo Tracker 启动失败', message)
+    console.error('[PinFlow] 启动失败:', err)
+    dialog.showErrorBox('PinFlow 启动失败', message)
     app.exit(1)
   })
 

@@ -162,14 +162,14 @@ function notify(title: string, body: string): void {
  */
 export async function checkForUpdatesWithFeedback(): Promise<UpdateStatus> {
   if (!status.enabled) {
-    notify('Todo Tracker', '当前版本不支持自动更新（开发版或免安装版）')
+    notify('PinFlow', '当前版本不支持自动更新（开发版或免安装版）')
     return status
   }
   await checkForUpdates()
   if (status.phase === 'available') {
     notify('发现新版本', `v${status.version} 可更新，打开「设置 → 更新」即可下载`)
   } else if (status.phase === 'not-available') {
-    notify('Todo Tracker', `已是最新版本 v${status.currentVersion}`)
+    notify('PinFlow', `已是最新版本 v${status.currentVersion}`)
   } else if (status.phase === 'error') {
     notify('检查更新失败', status.message ?? '未知错误')
   }

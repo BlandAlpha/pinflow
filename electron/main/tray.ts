@@ -123,7 +123,7 @@ export function createTray(prefsChanged?: () => void): Tray {
   if (isMac) trayImage.setTemplateImage(true)
   // macOS 上不能 resize：会丢掉 @2x 的 2 倍图，菜单栏上会糊
   const instance = new Tray(isMac ? trayImage : trayImage.resize({ width: 16, height: 16 }))
-  instance.setToolTip('Todo Tracker')
+  instance.setToolTip('PinFlow')
   instance.setContextMenu(buildMenu())
   // macOS：setContextMenu 后左键点击即弹菜单，再绑定 click 会同时弹出菜单与主窗口
   if (!isMac) instance.on('click', () => showMainWindow())

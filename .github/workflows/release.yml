@@ -3,7 +3,7 @@ name: Release
 # 发布流程：打 tag → 自动构建 → 上传分发源 → 建 GitHub Release
 #   1. version ：校验 tag 与 package.json 一致（不一致会让客户端陷入「更新死循环」）
 #   2. windows ：NSIS 安装包 + latest.yml —— 应用内更新的唯一来源
-#   3. macos   ：Todo Tracker.app 的 zip —— 未签名，只做手动下载分发，不参与自动更新
+#   3. macos   ：PinFlow.app 的 zip —— 未签名，只做手动下载分发，不参与自动更新
 #   4. publish ：把两边的产物合并，统一创建 GitHub Release
 # 版本号规则与首次配置见 docs/RELEASE.md
 on:
@@ -129,8 +129,11 @@ jobs:
               --endpoint-url "$ENDPOINT" --no-progress
           done
           echo "上传 latest.yml"
+          # 显式声明不缓存：它是客户端判断「有没有新版本」的唯一依据，
+          # 一旦被 CDN 缓存住，就会出现「明明发了新版，客户端一直说已是最新」
           aws s3 cp dist-win/latest.yml "s3://${R2_BUCKET}/latest.yml" \
-            --endpoint-url "$ENDPOINT" --no-progress
+            --endpoint-url "$ENDPOINT" --no-progress \
+            --cache-control "no-store, must-revalidate"
           echo "更新源已刷新：${{ vars.UPDATE_BASE_URL }}/latest.yml"
 
       # 兜底：R2 没配好时产物也不会丢，可在 Actions 页面下载
@@ -174,15 +177,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist-mac
-          # 产物路径：forge-dist/make/zip/darwin/<arch>/Todo Tracker-darwin-<arch>-<version>.zip
+          # 产物路径：forge-dist/make/zip/darwin/<arch>/PinFlow-darwin-<arch>-<version>.zip
           # 通配符是为了不依赖 runner 架构（arm64 / x64）
           #
-          # 改名去掉空格：macOS 产品名是 "Todo Tracker"，zip maker 直接拿它当文件名，
+          # 改名去掉空格：macOS 产品名是 "PinFlow"，zip maker 直接拿它当文件名，
           # 放到 R2 上 URL 会变成 %20 —— 与 NSIS 那边「安装包名去空格」是同一个理由
           VERSION=$(node -p "require('./package.json').version")
           for f in forge-dist/make/zip/darwin/*/*.zip; do
             ARCH=$(basename "$(dirname "$f")")
-            cp "$f" "dist-mac/todo-tracker-${VERSION}-mac-${ARCH}.zip"
+            cp "$f" "dist-mac/pinflow-${VERSION}-mac-${ARCH}.zip"
           done
           echo "--- 产物 ---"
           ls -lh dist-mac/

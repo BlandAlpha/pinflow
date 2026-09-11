@@ -72,7 +72,7 @@ export async function getAutoLaunch(): Promise<boolean> {
     try {
       if (await autoLauncher().isEnabled()) return true
     } catch (err) {
-      console.warn('[TodoTracker] 读取开机自启状态失败:', err)
+      console.warn('[PinFlow] 读取开机自启状态失败:', err)
     }
   }
   return nativeRead()
@@ -94,7 +94,7 @@ export async function setAutoLaunch(enabled: boolean): Promise<boolean> {
       else await autoLauncher().disable()
       libOk = true
     } catch (err) {
-      console.warn(`[TodoTracker] 设置开机自启失败（${enabled ? '开启' : '关闭'}）:`, err)
+      console.warn(`[PinFlow] 设置开机自启失败（${enabled ? '开启' : '关闭'}）:`, err)
     }
   }
 
