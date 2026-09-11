@@ -1,6 +1,10 @@
 name: Release
 
-# 发布流程：打 tag → 自动构建 → 上传更新源 → 建 GitHub Release
+# 发布流程：打 tag → 自动构建 → 上传分发源 → 建 GitHub Release
+#   1. version ：校验 tag 与 package.json 一致（不一致会让客户端陷入「更新死循环」）
+#   2. windows ：NSIS 安装包 + latest.yml —— 应用内更新的唯一来源
+#   3. macos   ：Todo Tracker.app 的 zip —— 未签名，只做手动下载分发，不参与自动更新
+#   4. publish ：把两边的产物合并，统一创建 GitHub Release
 # 版本号规则与首次配置见 docs/RELEASE.md
 on:
   push:
@@ -17,21 +21,14 @@ permissions:
   contents: write # 创建 GitHub Release 需要
 
 jobs:
-  release:
-    # 必须 Windows：NSIS maker 只在 win32 上可用
-    runs-on: windows-latest
+  # ---------- 1. 版本校验 ----------
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-
-      # Node 22：与 ci.yml 同样的原因 —— better-sqlite3 只有 v127（Node 22）
-      # 及以上的官方预编译包，Node 20（v115）会回退到本地编译并失败
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: 安装依赖
-        run: npm ci
 
       # tag 与 package.json 版本必须一致：否则客户端拿到的版本号与实际不符，
       # 会出现「提示更新 → 装完还是旧版本 → 又提示更新」的死循环
@@ -50,6 +47,21 @@ jobs:
           echo "version=$PKG" >> "$GITHUB_OUTPUT"
           echo "tag=v$PKG" >> "$GITHUB_OUTPUT"
           echo "发布版本：v$PKG"
+
+  # ---------- 2. Windows 安装包（NSIS）----------
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
 
       - name: 类型检查
         run: npm run typecheck
@@ -71,13 +83,13 @@ jobs:
       - name: 收集发布产物
         shell: bash
         run: |
-          mkdir -p dist
-          cp forge-dist/make/nsis/x64/* dist/
+          mkdir -p dist-win
+          cp forge-dist/make/nsis/x64/* dist-win/
           echo "--- 产物 ---"
-          ls -lh dist/
+          ls -lh dist-win/
           # 少了 latest.yml 客户端就永远检测不到更新，这里直接拦住
-          test -f dist/latest.yml || { echo "::error::未生成 latest.yml，检查 forge.config.js 的 updater 配置"; exit 1; }
-          test -n "$(ls dist/*.exe 2>/dev/null)" || { echo "::error::未找到安装包"; exit 1; }
+          test -f dist-win/latest.yml || { echo "::error::未生成 latest.yml，检查 forge.config.js 的 updater 配置"; exit 1; }
+          test -n "$(ls dist-win/*.exe 2>/dev/null)" || { echo "::error::未找到安装包"; exit 1; }
 
       - name: 上传到 Cloudflare R2
         shell: bash
@@ -97,7 +109,7 @@ jobs:
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           # 先传安装包与差量包，最后传 latest.yml。
           # 反过来的话，老客户端会先看到新 latest.yml 却下不到 exe（404）。
-          for f in dist/*; do
+          for f in dist-win/*; do
             case "$f" in
               */latest.yml) continue ;;
             esac
@@ -106,7 +118,7 @@ jobs:
               --endpoint-url "$ENDPOINT" --no-progress
           done
           echo "上传 latest.yml"
-          aws s3 cp dist/latest.yml "s3://${R2_BUCKET}/latest.yml" \
+          aws s3 cp dist-win/latest.yml "s3://${R2_BUCKET}/latest.yml" \
             --endpoint-url "$ENDPOINT" --no-progress
           echo "更新源已刷新：${{ vars.UPDATE_BASE_URL }}/latest.yml"
 
@@ -114,15 +126,100 @@ jobs:
       - name: 存档产物
         uses: actions/upload-artifact@v4
         with:
-          name: todo-tracker-${{ steps.ver.outputs.version }}-win-x64
-          path: dist/
+          name: windows-installer
+          path: dist-win/
           retention-days: 30
+
+  # ---------- 3. macOS 应用包（zip）----------
+  macos:
+    needs: version
+    # macos-latest 目前是 Apple Silicon（arm64），产出的就是 arm64 版。
+    # 需要 Intel 版时再加一个 macos-13（x64）矩阵即可 —— 注意原生模块必须
+    # 按目标架构取（fetch-native.mjs 用的是 process.arch），不能交叉打包。
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 准备原生依赖
+        run: node scripts/fetch-native.mjs
+
+      # 不重复 typecheck / 单元测试：同一份代码已在 windows job 与 push 触发的 CI 里跑过。
+      # 这里只验证「macOS 能打出包」（图标 .icns、zip maker 都只在 mac 上生效）。
+      #
+      # 不传 UPDATE_BASE_URL：zip maker 不会生成 app-update.yml，
+      # 因此 mac 版在设置里会如实显示「不支持自动更新」（未签名也不具备自动更新条件）。
+      - name: 构建应用包
+        run: npm run make
+
+      - name: 收集发布产物
+        shell: bash
+        run: |
+          mkdir -p dist-mac
+          # 路径形如 forge-dist/make/zip/darwin/<arch>/<name>-darwin-<arch>-<version>.zip
+          # 用通配符是为了不依赖 runner 架构（arm64 / x64）
+          cp forge-dist/make/zip/darwin/*/*.zip dist-mac/
+          echo "--- 产物 ---"
+          ls -lh dist-mac/
+          test -n "$(ls dist-mac/*.zip 2>/dev/null)" || { echo "::error::未找到 macOS 应用包"; exit 1; }
+
+      # macOS 包同样放 R2：仓库私有，GitHub Release 对未登录用户不可见，
+      # 只有 R2 是公开可下载的。zip 不参与应用内更新，所以没有「必须最后传」的顺序要求。
+      - name: 上传到 Cloudflare R2
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_BUCKET" ]; then
+            echo "::warning::未配置 R2_ACCOUNT_ID / R2_BUCKET，跳过上传；产物见下方 Artifacts 与 GitHub Release"
+            exit 0
+          fi
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          for f in dist-mac/*; do
+            echo "上传 $(basename "$f")"
+            aws s3 cp "$f" "s3://${R2_BUCKET}/$(basename "$f")" \
+              --endpoint-url "$ENDPOINT" --no-progress
+          done
+
+      - name: 存档产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: dist-mac/
+          retention-days: 30
+
+  # ---------- 4. 统一创建 GitHub Release ----------
+  # 单独一个 job：两个构建 job 是并行的，各自去创建 Release 会互相打架
+  publish:
+    needs: [version, windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 汇总产物
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 列出产物
+        run: ls -lh dist/
 
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: v${{ steps.ver.outputs.version }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: v${{ needs.version.outputs.version }}
           files: dist/*
           generate_release_notes: true
           draft: false
