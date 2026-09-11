@@ -10,6 +10,7 @@ import type {
   ThemeMode,
   Todo,
   UpdateSpaceInput,
+  UpdateStatus,
   UpdateTodoInput
 } from '@shared/types'
 import * as db from './db'
@@ -24,6 +25,12 @@ import {
 import { getAutoLaunch, setAutoLaunch } from './autolaunch'
 import { getShortcutState, setCaptureShortcutEnabled, setFullscreenGuardEnabled } from './shortcut'
 import { refreshTrayMenu } from './tray'
+import {
+  checkForUpdates,
+  downloadUpdate,
+  getUpdateStatus,
+  installUpdate
+} from './updater'
 
 /** preload 首帧同步读取的主题快照 */
 export interface ThemeSnapshot {
@@ -225,6 +232,12 @@ export function registerIpcHandlers(): void {
     return getPrefs()
   })
   ipcMain.handle(IPC.APP_GET_SHORTCUT_STATE, (): ShortcutState => getShortcutState())
+
+  /* ---------- 应用内更新 ---------- */
+  ipcMain.handle(IPC.APP_UPDATE_STATUS, (): UpdateStatus => getUpdateStatus())
+  ipcMain.handle(IPC.APP_UPDATE_CHECK, (): Promise<UpdateStatus> => checkForUpdates())
+  ipcMain.handle(IPC.APP_UPDATE_DOWNLOAD, (): Promise<UpdateStatus> => downloadUpdate())
+  ipcMain.handle(IPC.APP_UPDATE_INSTALL, (): void => installUpdate())
   ipcMain.handle(
     IPC.APP_SET_AUTO_LAUNCH,
     (_e, enabled: boolean): Promise<boolean> => setAutoLaunch(enabled)

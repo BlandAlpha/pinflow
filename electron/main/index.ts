@@ -7,8 +7,9 @@ import { broadcastDataChanged, broadcastTheme, registerIpcHandlers } from './ipc
 import { applyTheme, broadcastPrefsChanged, getPrefs, initPrefs, setTheme } from './prefs'
 import { CAPTURE_SHORTCUT, disposeShortcut, initShortcut } from './shortcut'
 import { appState } from './state'
-import { createTray } from './tray'
+import { createTray, refreshTrayMenu } from './tray'
 import { createMainWindow, showCaptureWindow, showMainWindow } from './windows'
+import { disposeUpdater, initUpdater } from './updater'
 
 // Squirrel（Windows 安装/更新）在首次安装、升级、卸载时会以特殊参数启动本进程，
 // 这些阶段必须立即退出，否则安装程序会卡住。
@@ -77,11 +78,15 @@ if (!singleInstance) {
       hidden: process.argv.includes('--startup') || process.argv.includes('--hidden')
     })
 
-    // 6. 冒烟测试：--smoke 启动时自动截图并退出。
+    // 6. 应用内更新：打包后延迟静默检查一次，结果体现在设置面板与托盘菜单
+    initUpdater(() => refreshTrayMenu())
+
+    // 7. 冒烟测试：--smoke 启动时自动截图并退出。
     //    只在未打包时加载：它会往 app.getAppPath()/.smoke 写文件，
     //    而打包后 app.getAppPath() 在 asar 内（只读）。
     if (!app.isPackaged && process.argv.includes('--smoke')) {
-      void import('./smoke').then((m) => m.runSmokeTest(CAPTURE_SHORTCUT))    }
+      void import('./smoke').then((m) => m.runSmokeTest(CAPTURE_SHORTCUT))
+    }
 
     app.on('activate', () => {
       showMainWindow()
@@ -95,5 +100,6 @@ if (!singleInstance) {
   app.on('before-quit', () => {
     appState.quitting = true
     disposeShortcut()
+    disposeUpdater()
   })
 }

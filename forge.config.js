@@ -2,11 +2,21 @@ const path = require('node:path')
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
+// 应用内更新的源地址（客户端会去拉 `${UPDATE_BASE_URL}/latest.yml`）。
+// 它被写进随包分发的 resources/app-update.yml，运行时不可改，所以必须构建时定。
+// CI 里由仓库变量 UPDATE_BASE_URL 注入；本地打包不设就落到占位值，
+// 装出来的包其它功能都正常，只是「检查更新」会连不上。
+const UPDATE_BASE_URL = process.env.UPDATE_BASE_URL || 'https://dl.example.com/todo-tracker'
+
 module.exports = {
   // Forge 的打包逻辑会硬编码忽略项目根下的 /out/ 目录，
   // 因此本项目把 electron-vite 的构建产物输出到 app-build/，避开该忽略规则。
   // Forge 自身的输出（解包目录 + 安装包）写到 forge-dist/。
-  outDir: 'forge-dist',
+  //
+  // FORGE_OUT_DIR 是本地验证用的逃生口：Windows 上 forge-dist 里的 app.asar
+  // 常被 Defender/索引进程短暂占用，导致 Forge 清目录时报「另一个进程正在使用此文件」。
+  // 换个空目录就能照常验证构建，不必动已发布产物。CI 不设该变量，走默认值。
+  outDir: process.env.FORGE_OUT_DIR || 'forge-dist',
   packagerConfig: {
     asar: true,
     // exe 文件本身的图标（Windows 必须是 .ico）；不配则 exe 用 Electron 默认图标。
@@ -20,6 +30,18 @@ module.exports = {
     // 2. 只接受字符串路径，复制目标是 resources/<basename>，
     //    不支持 { from, to } 对象（那是 electron-builder 的写法，传了会直接抛错）。
     extraResource: ['./resources'],
+    // Forge 的默认值只有 [/^\/out\//g]，而本项目把产物放在 forge-dist/ 和 app-build/。
+    // 不显式忽略的话，第二次 make 会把上一次的安装包（近百 MB）连同 .smoke 里的
+    // 截图与旧产物一起塞进 app.asar —— 实测把 asar 撑到 823 MB，安装包 553 MB。
+    // 注意：设置了 ignore 就会**替换**默认值，所以 /^\/out\// 必须自己带上。
+    ignore: [
+      /^\/out\//g,
+      /^\/forge-dist\//g,
+      /^\/\.smoke\//g,
+      /^\/\.git\//g,
+      /^\/\.github\//g,
+      /^\/\.workbuddy\//g,
+    ],
   },
   rebuildConfig: {},
   makers: [
@@ -28,8 +50,29 @@ module.exports = {
       // 底层为 electron-builder 的 app-builder NSIS 引擎。
       name: '@felixrieseberg/electron-forge-maker-nsis',
       config: {
+        // 应用内更新：这个 maker 会据此生成两份文件
+        // 1) 打进包里的 resources/app-update.yml（provider / url / channel）
+        // 2) 与安装包并排的 latest.yml（版本号 + 安装包 sha512/size）
+        // 两者缺一不可：前者告诉客户端去哪查，后者是客户端比对版本的依据。
+        // 刻意不设 publisherName —— 设了 electron-updater 会强制校验代码签名，
+        // 而我们暂未签名，会导致更新被拒。
+        updater: {
+          url: UPDATE_BASE_URL,
+          name: 'Todo Tracker',
+          channel: 'latest',
+          updaterCacheDirName: 'todo-tracker-updater',
+        },
         // 必须用函数形式返回（maker 以 getAppBuilderConfig() 取值）
         getAppBuilderConfig: () => ({
+          // 安装包名去空格：latest.yml 里的 url 会被客户端按 URL 使用，
+          // 「Setup 0.1.0.exe」带空格和点号容易在各类代理/网关处出岔子。
+          artifactName: 'todo-tracker-${version}-setup.${ext}',
+          // NSIS 的安装 / 卸载程序图标走 electron-builder 的 win.icon；
+          // 不配的话日志会提示 "default Electron icon is used"，安装包是 Electron 默认图标
+          // （packagerConfig.icon 只管包内那个 exe，两者不互相替代）。
+          win: {
+            icon: path.resolve(__dirname, 'resources/icon.ico'),
+          },
           // 注意：这些键都属于 nsis 层（electron-builder 顶层不接受 license /
           // installerLanguages）；且 license 必须用绝对路径 —— 构建时 app-builder
           // 的工作目录是临时打包目录，相对路径会找不到 EULA。

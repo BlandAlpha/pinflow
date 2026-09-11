@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   Database,
+  Download,
   Gamepad2,
   Github,
   Heart,
@@ -12,10 +13,18 @@ import {
   Layers,
   Plus,
   Power,
+  RefreshCw,
   Trash2
 } from 'lucide-react'
 import { SPACE_COLORS, SPACE_ICONS } from '@shared/types'
-import type { AppPrefs, ShortcutState, Space, SpaceColor, SpaceIcon } from '@shared/types'
+import type {
+  AppPrefs,
+  ShortcutState,
+  Space,
+  SpaceColor,
+  SpaceIcon,
+  UpdateStatus
+} from '@shared/types'
 import { useTodos } from '@/store/todos'
 import { SPACE_COLOR_LABELS, SPACE_ICON_LABELS, SPACE_ICON_MAP, spaceColor } from '@/lib/space'
 import { cn } from '@/lib/utils'
@@ -56,6 +65,7 @@ export function SettingsDialog({
   const [confirmWipe, setConfirmWipe] = useState(false)
   const [prefs, setPrefs] = useState<AppPrefs>(FALLBACK_PREFS)
   const [shortcutState, setShortcutState] = useState<ShortcutState | null>(null)
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
   const clearAll = useTodos((s) => s.clearAll)
 
   const refreshShortcutState = useCallback(async () => {
@@ -69,11 +79,18 @@ export function SettingsDialog({
     void window.api.getVersion().then(setVersion)
     void window.api.getPrefs().then(setPrefs)
     void refreshShortcutState()
+    void window.api.getUpdateStatus().then(setUpdate)
     // 托盘右键菜单也能改这两个开关，改完要同步到这里
-    return window.api.onPrefsChanged((p) => {
+    const offPrefs = window.api.onPrefsChanged((p) => {
       setPrefs(p)
       void refreshShortcutState()
     })
+    // 检查/下载是异步的，进度靠主进程推过来（打开设置前可能就已经在下载了）
+    const offUpdate = window.api.onUpdateStatus(setUpdate)
+    return () => {
+      offPrefs()
+      offUpdate()
+    }
   }, [open, refreshShortcutState])
 
   // 快捷键没生效时给出原因，避免"开关开着但按不出来"这种困惑
@@ -145,6 +162,8 @@ export function SettingsDialog({
             </Row>
           </Group>
 
+          <UpdateSection version={version} update={update} onStatus={setUpdate} />
+
           <Group label="数据">
             <Row
               icon={<Database className="h-3.5 w-3.5" />}
@@ -202,6 +221,77 @@ export function SettingsDialog({
         </Dialog>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/* ---------- 更新 ---------- */
+
+/** 状态 -> 文案。集中在表里，避免 JSX 里塞一长串三元 */
+function updateTexts(status: UpdateStatus | null): { title: string; detail: string } {
+  if (!status) return { title: '检查更新', detail: '' }
+  const detail = status.enabled ? '' : '开发版或免安装版不支持'
+  switch (status.phase) {
+    case 'checking':
+      return { title: '正在检查更新…', detail: '' }
+    case 'available':
+      return { title: `发现新版本 v${status.version}`, detail: '' }
+    case 'downloading':
+      return { title: `正在下载更新 ${status.percent}%`, detail: '' }
+    case 'downloaded':
+      return { title: `v${status.version} 已下载`, detail: '重启后自动安装' }
+    case 'not-available':
+      return { title: '已是最新版本', detail: '' }
+    case 'error':
+      return { title: '检查更新失败', detail: status.message ?? '' }
+    default:
+      return { title: '检查更新', detail }
+  }
+}
+
+/** 更新：状态 + 一个随状态变身的按钮，进度条只在下载时出现 */
+function UpdateSection({
+  version,
+  update,
+  onStatus
+}: {
+  version: string
+  update: UpdateStatus | null
+  onStatus: (s: UpdateStatus) => void
+}) {
+  const { title, detail } = updateTexts(update)
+  const busy = update?.phase === 'checking' || update?.phase === 'downloading'
+  const disabled = busy || update?.enabled === false
+
+  const action =
+    update?.phase === 'downloaded'
+      ? { label: '重启并安装', run: () => void window.api.installUpdate() }
+      : update?.phase === 'available'
+        ? { label: '下载更新', run: () => void window.api.downloadUpdate().then(onStatus) }
+        : { label: '检查更新', run: () => void window.api.checkForUpdates().then(onStatus) }
+
+  return (
+    <Group label="更新">
+      <Row
+        icon={<RefreshCw className="h-3.5 w-3.5" />}
+        label="当前版本"
+        hint={version ? `v${version}` : '…'}
+      />
+      <Row icon={<Download className="h-3.5 w-3.5" />} label={title} hint={detail}>
+        <Button size="xs" variant="outline" disabled={disabled} onClick={action.run}>
+          {action.label}
+        </Button>
+      </Row>
+      {update?.phase === 'downloading' && (
+        <div className="px-3 py-2">
+          <div className="h-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-300"
+              style={{ width: `${update.percent}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </Group>
   )
 }
 

@@ -4,6 +4,7 @@ import type { MenuItem, MenuItemConstructorOptions } from 'electron'
 import { getPrefs } from './prefs'
 import { CAPTURE_SHORTCUT, setCaptureShortcutEnabled, setFullscreenGuardEnabled } from './shortcut'
 import { appState } from './state'
+import { checkForUpdatesWithFeedback, getUpdateStatus } from './updater'
 import { requestNewTask, showCaptureWindow, showMainWindow } from './windows'
 
 function iconPath(): string {
@@ -59,6 +60,16 @@ function buildMenu(): Menu {
     },
     { type: 'separator' },
     {
+      // 有已下载的版本时直接提示重启安装，否则就是普通检查
+      label: updateLabel(),
+      click: () => {
+        const status = getUpdateStatus()
+        if (status.phase === 'downloaded') showMainWindow()
+        else void checkForUpdatesWithFeedback()
+      }
+    },
+    { type: 'separator' },
+    {
       label: '退出',
       click: () => {
         appState.quitting = true
@@ -67,6 +78,28 @@ function buildMenu(): Menu {
     }
   ]
   return Menu.buildFromTemplate(template)
+}
+
+/** 托盘菜单里那行更新的文案：跟着状态走，省得用户点进去才知道结果 */
+function updateLabel(): string {
+  const status = getUpdateStatus()
+  if (!status.enabled) return `检查更新…（v${status.currentVersion}）`
+  switch (status.phase) {
+    case 'checking':
+      return '正在检查更新…'
+    case 'available':
+      return `发现新版本 v${status.version}（去更新）`
+    case 'downloading':
+      return `正在下载更新 ${status.percent}%`
+    case 'downloaded':
+      return `v${status.version} 已就绪（重启安装）`
+    case 'not-available':
+      return `已是最新版本（v${status.currentVersion}）`
+    case 'error':
+      return '检查更新失败（重试）'
+    default:
+      return `检查更新…（v${status.currentVersion}）`
+  }
 }
 
 export function refreshTrayMenu(): void {

@@ -2,6 +2,8 @@ node_modules
 dist
 app-build
 .npmrc
+# electron-vite 加载 TS 配置时会生成这种临时文件，别让它进版本库
+electron.vite.config.*.mjs
 
 .smoke
 *.log

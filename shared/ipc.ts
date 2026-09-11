@@ -10,6 +10,7 @@ import type {
   ThemeMode,
   Todo,
   UpdateSpaceInput,
+  UpdateStatus,
   UpdateTodoInput
 } from './types'
 
@@ -58,6 +59,13 @@ export const IPC = {
   APP_SET_CAPTURE_SHORTCUT: 'app:setCaptureShortcut',
   APP_SET_FULLSCREEN_GUARD: 'app:setFullscreenGuard',
   APP_GET_SHORTCUT_STATE: 'app:getShortcutState',
+  /** 应用内更新：取状态 / 检查 / 下载 / 退出并安装 */
+  APP_UPDATE_STATUS: 'app:updateStatus',
+  APP_UPDATE_CHECK: 'app:updateCheck',
+  APP_UPDATE_DOWNLOAD: 'app:updateDownload',
+  APP_UPDATE_INSTALL: 'app:updateInstall',
+  /** 主进程 -> 渲染进程：更新状态变化（阶段 / 进度 / 错误） */
+  UPDATE_STATUS_CHANGED: 'app:updateStatusChanged',
   /** 主进程 -> 渲染进程：偏好变更（托盘菜单也会改，需双向同步） */
   PREFS_CHANGED: 'app:prefsChanged',
 
@@ -125,6 +133,16 @@ export interface TodoApi {
   setFullscreenGuard(enabled: boolean): Promise<AppPrefs>
   /** 快捷键运行时状态：是否真的注册上、是否被全屏临时屏蔽 */
   getShortcutState(): Promise<ShortcutState>
+  /** 当前更新状态（打开设置时先渲染，再靠 onUpdateStatus 跟进） */
+  getUpdateStatus(): Promise<UpdateStatus>
+  /** 主动检查更新（托盘菜单与设置里的「检查更新」都走这里） */
+  checkForUpdates(): Promise<UpdateStatus>
+  /** 下载已发现的新版本 */
+  downloadUpdate(): Promise<UpdateStatus>
+  /** 退出应用并静默安装已下载的版本 */
+  installUpdate(): Promise<void>
+  /** 订阅更新状态变化 */
+  onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
   /** 订阅偏好变更（托盘右键菜单里的开关同样会触发） */
   onPrefsChanged(cb: (prefs: AppPrefs) => void): () => void
   /** 订阅「数据已变更」（来自快速捕获窗口等） */

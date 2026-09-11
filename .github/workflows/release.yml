@@ -1,0 +1,126 @@
+name: Release
+
+# 发布流程：打 tag → 自动构建 → 上传更新源 → 建 GitHub Release
+# 版本号规则与首次配置见 docs/RELEASE.md
+on:
+  push:
+    tags: ['v*']
+  # 允许手动重跑（例如上次 R2 上传失败），版本号仍以 package.json 为准
+  workflow_dispatch:
+
+# 同一时间只跑一个发布，避免两个 tag 互相覆盖 latest.yml
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # 创建 GitHub Release 需要
+
+jobs:
+  release:
+    # 必须 Windows：NSIS maker 只在 win32 上可用
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      # tag 与 package.json 版本必须一致：否则客户端拿到的版本号与实际不符，
+      # 会出现「提示更新 → 装完还是旧版本 → 又提示更新」的死循环
+      - name: 校验版本号
+        id: ver
+        shell: bash
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [ "$TAG" != "$PKG" ]; then
+              echo "::error::tag $GITHUB_REF_NAME 与 package.json 的 $PKG 不一致，请用 npm run release:patch 发版"
+              exit 1
+            fi
+          fi
+          echo "version=$PKG" >> "$GITHUB_OUTPUT"
+          echo "tag=v$PKG" >> "$GITHUB_OUTPUT"
+          echo "发布版本：v$PKG"
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 单元测试
+        run: npm test
+
+      # better-sqlite3 要的是 Electron ABI 的预编译产物，npm ci 装的是 Node ABI，
+      # 两者不通用；必须在打包前换成 Electron 版（脚本按 electron ABI 自动挑）
+      - name: 准备原生依赖
+        run: node scripts/fetch-native.mjs
+
+      - name: 构建安装包
+        run: npm run make
+        env:
+          # 写进 resources/app-update.yml，决定客户端去哪查更新
+          UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL }}
+
+      - name: 收集发布产物
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp forge-dist/make/nsis/x64/* dist/
+          echo "--- 产物 ---"
+          ls -lh dist/
+          # 少了 latest.yml 客户端就永远检测不到更新，这里直接拦住
+          test -f dist/latest.yml || { echo "::error::未生成 latest.yml，检查 forge.config.js 的 updater 配置"; exit 1; }
+          test -n "$(ls dist/*.exe 2>/dev/null)" || { echo "::error::未找到安装包"; exit 1; }
+
+      - name: 上传到 Cloudflare R2
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # aws-cli 新版默认带 CRC64NVME 校验头，R2 不认，会直接 400
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_BUCKET" ]; then
+            echo "::warning::未配置 R2_ACCOUNT_ID / R2_BUCKET，跳过上传；产物见下方 Artifacts 与 GitHub Release"
+            exit 0
+          fi
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          # 先传安装包与差量包，最后传 latest.yml。
+          # 反过来的话，老客户端会先看到新 latest.yml 却下不到 exe（404）。
+          for f in dist/*; do
+            case "$f" in
+              */latest.yml) continue ;;
+            esac
+            echo "上传 $(basename "$f")"
+            aws s3 cp "$f" "s3://${R2_BUCKET}/$(basename "$f")" \
+              --endpoint-url "$ENDPOINT" --no-progress
+          done
+          echo "上传 latest.yml"
+          aws s3 cp dist/latest.yml "s3://${R2_BUCKET}/latest.yml" \
+            --endpoint-url "$ENDPOINT" --no-progress
+          echo "更新源已刷新：${{ vars.UPDATE_BASE_URL }}/latest.yml"
+
+      # 兜底：R2 没配好时产物也不会丢，可在 Actions 页面下载
+      - name: 存档产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: todo-tracker-${{ steps.ver.outputs.version }}-win-x64
+          path: dist/
+          retention-days: 30
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: v${{ steps.ver.outputs.version }}
+          files: dist/*
+          generate_release_notes: true
+          draft: false

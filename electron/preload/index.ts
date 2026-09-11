@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/ipc'
 import type { CaptureApi, TodoApi } from '@shared/ipc'
-import type { AppPrefs, Todo } from '@shared/types'
+import type { AppPrefs, Todo, UpdateStatus } from '@shared/types'
 import { installThemeBootstrap } from './theme'
 
 const themeSnapshot = installThemeBootstrap()
@@ -51,6 +51,17 @@ const api: TodoApi & { themeSnapshot: typeof themeSnapshot } = {
   setFullscreenGuard: (enabled): Promise<AppPrefs> =>
     ipcRenderer.invoke(IPC.APP_SET_FULLSCREEN_GUARD, enabled),
   getShortcutState: () => ipcRenderer.invoke(IPC.APP_GET_SHORTCUT_STATE),
+
+  getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.APP_UPDATE_STATUS),
+  checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.APP_UPDATE_CHECK),
+  downloadUpdate: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.APP_UPDATE_DOWNLOAD),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.APP_UPDATE_INSTALL),
+  onUpdateStatus: (cb) => {
+    const listener = (_e: unknown, status: UpdateStatus) => cb(status)
+    ipcRenderer.on(IPC.UPDATE_STATUS_CHANGED, listener)
+    return () => ipcRenderer.removeListener(IPC.UPDATE_STATUS_CHANGED, listener)
+  },
+
   onPrefsChanged: (cb) => {
     const listener = (_e: unknown, prefs: AppPrefs) => cb(prefs)
     ipcRenderer.on(IPC.PREFS_CHANGED, listener)

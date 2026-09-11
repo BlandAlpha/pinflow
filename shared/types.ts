@@ -157,6 +157,33 @@ export interface ShortcutState {
   suspendedByFullscreen: boolean
 }
 
+/** 应用内更新的阶段机：由主进程维护并广播，渲染层只做展示 */
+export type UpdatePhase =
+  | 'idle' // 还没检查过
+  | 'checking' // 正在向更新源查询
+  | 'available' // 查到新版本，等待用户确认下载
+  | 'not-available' // 已是最新
+  | 'downloading' // 下载安装包中
+  | 'downloaded' // 下载完成，等待重启安装
+  | 'error' // 检查或下载失败
+
+export interface UpdateStatus {
+  phase: UpdatePhase
+  /** 当前运行的版本 */
+  currentVersion: string
+  /** 新版本号（available / downloading / downloaded 时才有） */
+  version: string | null
+  /** 下载进度百分比 0-100（仅 downloading） */
+  percent: number
+  /** 失败原因（仅 error） */
+  message: string | null
+  /**
+   * 更新功能是否可用。
+   * 开发态（npm run dev）没有 app-update.yml，或构建时未配置更新源时为 false。
+   */
+  enabled: boolean
+}
+
 /** 四象限编号：1 重要紧急 / 2 重要不紧急 / 3 不重要紧急 / 4 不重要不紧急 */
 export type Quadrant = 1 | 2 | 3 | 4
 

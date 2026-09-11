@@ -61,7 +61,7 @@ npm run test           # 单元测试 (vitest)：优先级评分 + 视图模型 
 npm run build          # 构建到 app-build/
 npm run smoke          # 构建 + 自动化冒烟测试（截图输出到 .smoke/）
 npm run package        # 打包免安装版 (forge-dist/todo-tracker-win32-x64/todo-tracker.exe)
-npm run make           # 构建并打包 Squirrel 安装包 (forge-dist/make/squirrel.windows/x64/)
+npm run make           # 构建并打包 NSIS 安装向导 (forge-dist/make/nsis/x64/)
 ```
 
 冒烟测试可选参数：
@@ -171,7 +171,7 @@ src/                  渲染进程 (React)
 ```bash
 npm run build      # 只构建：产物在 app-build/（main / preload / renderer）
 npm run package    # 构建 + 免安装版：forge-dist/todo-tracker-win32-x64/todo-tracker.exe（可直接运行）
-npm run make       # 构建 + Squirrel 安装包：forge-dist/make/squirrel.windows/x64/todo-tracker-<版本> Setup.exe
+npm run make       # 构建 + NSIS 安装向导：forge-dist/make/nsis/x64/todo-tracker-<版本>-setup.exe
 ```
 
 打包走 Electron Forge（`forge.config.js`）：
@@ -179,10 +179,30 @@ npm run make       # 构建 + Squirrel 安装包：forge-dist/make/squirrel.wind
 - `outDir: forge-dist` —— Forge 输出目录；electron-vite 输出到 `app-build/`，避开 Forge 硬编码忽略根目录 `out/` 的规则。
 - `packagerConfig.asar: true` + `plugin-auto-unpack-natives` —— 原生模块 `better_sqlite3.node` 自动从 asar 解包。
 - `plugin-fuses` —— 关闭 `RunAsNode` / Node CLI 参数、开启 asar 完整性校验（打包期固化，不依赖签名）。
-- 不做代码签名：本地自用应用，Squirrel 安装包首次运行会被 SmartScreen 提示，属正常现象。
+- NSIS 向导式安装（`@felixrieseberg/electron-forge-maker-nsis`）：中文向导 + 许可页 + 可选安装目录；
+  仅当前用户安装（不需要管理员），卸载时**保留用户数据**。
+- `updater` 配置 —— 同时生成随包分发的 `resources/app-update.yml` 与安装包旁的 `latest.yml`，
+  这两份文件是应用内更新的依据（详见下文）。
+- 不做代码签名：安装包首次运行会被 SmartScreen 提示，属正常现象。
 
 构建前请确保 `node scripts/fetch-native.mjs` 已成功（better-sqlite3 使用
 `electron-v130` 预编译版本，与 Electron 33 匹配）。原生模块不做源码重建，无 MSVC 也能打包。
+
+## 应用内更新与版本发布
+
+客户端内置更新检测与一键升级：启动后静默检查一次，也可在 **设置 → 更新** 或
+**托盘右键 → 「检查更新…」** 手动触发；发现新版本由用户确认后下载，装完自动重启。
+
+- 更新源是 Cloudflare R2 上的一个 `latest.yml`，**客户端不需要任何密钥**（代码库保持私有，安装包公开可下载）。
+- 更新源地址在构建时由 `UPDATE_BASE_URL` 注入，写进包内的 `app-update.yml`，**换 CDN 需要重新发版**。
+- 免安装版（`npm run package`）与源码态（`npm run dev`）没有 `app-update.yml`，会如实显示「不支持自动更新」。
+
+发版只需一条命令（版本号规则、首次配置 R2 与 GitHub 变量/密钥、排障手册见 **[docs/RELEASE.md](docs/RELEASE.md)**）：
+
+```bash
+npm run release:patch      # 或 release:minor / release:major
+git push --follow-tags     # 触发 GitHub Actions 构建并上传更新源
+```
 
 ## 路线图（MVP 之后）
 
