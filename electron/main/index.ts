@@ -1,11 +1,12 @@
 import { join } from 'node:path'
 import { rmSync } from 'node:fs'
-import { app, nativeTheme } from 'electron'
+import { app, dialog, nativeTheme } from 'electron'
 import squirrelStartup from 'electron-squirrel-startup'
 import { initDatabase, purgeExpiredArchived, refreshDueLevels } from './db'
+import { installAppMenu, setAboutPanel } from './menu'
 import { broadcastDataChanged, broadcastTheme, registerIpcHandlers } from './ipc'
 import { applyTheme, broadcastPrefsChanged, getPrefs, initPrefs, setTheme } from './prefs'
-import { CAPTURE_SHORTCUT, disposeShortcut, initShortcut } from './shortcut'
+import { CAPTURE_SHORTCUT_ACCEL, disposeShortcut, initShortcut } from './shortcut'
 import { appState } from './state'
 import { createTray, refreshTrayMenu } from './tray'
 import { createMainWindow, showCaptureWindow, showMainWindow } from './windows'
@@ -65,6 +66,10 @@ if (!singleInstance) {
     // 2. IPC
     registerIpcHandlers()
 
+    // macOS：屏幕顶部的应用菜单（Edit role 是 ⌘C/⌘V 生效的前提）+ 关于面板
+    installAppMenu()
+    setAboutPanel()
+
     // 3. 系统托盘（菜单里的开关改动后广播给窗口，保持与设置弹窗一致）
     createTray(() => broadcastPrefsChanged())
 
@@ -85,12 +90,23 @@ if (!singleInstance) {
     //    只在未打包时加载：它会往 app.getAppPath()/.smoke 写文件，
     //    而打包后 app.getAppPath() 在 asar 内（只读）。
     if (!app.isPackaged && process.argv.includes('--smoke')) {
-      void import('./smoke').then((m) => m.runSmokeTest(CAPTURE_SHORTCUT))
+      void import('./smoke').then((m) => m.runSmokeTest(CAPTURE_SHORTCUT_ACCEL))
     }
 
     app.on('activate', () => {
       showMainWindow()
     })
+  }).catch((err: unknown) => {
+    // 这条链上任何一步抛错（最常见：原生模块 ABI 与 Electron 不匹配）都会让 promise 静默
+    // reject —— 表现为「进程活着，但托盘和窗口都不出现」，排查时毫无线索。必须显式暴露。
+    let message = err instanceof Error ? err.message : String(err)
+    if (/NODE_MODULE_VERSION/.test(message)) {
+      message +=
+        '\n\n原生模块与 Electron 的 ABI 不一致。执行 `node scripts/fetch-native.mjs` 重新获取与 Electron 匹配的预编译产物后再启动。'
+    }
+    console.error('[TodoTracker] 启动失败:', err)
+    dialog.showErrorBox('Todo Tracker 启动失败', message)
+    app.exit(1)
   })
 
   app.on('window-all-closed', () => {

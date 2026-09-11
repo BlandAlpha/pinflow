@@ -7,9 +7,16 @@ import { appState } from './state'
 import { checkForUpdatesWithFeedback, getUpdateStatus } from './updater'
 import { requestNewTask, showCaptureWindow, showMainWindow } from './windows'
 
+const isMac = process.platform === 'darwin'
+
+/**
+ * 托盘图标：macOS 用模板图（纯 alpha，由系统按菜单栏深浅色着色，
+ * 目录里要有 trayTemplate@2x.png 才会在 Retina 上清晰）；其它平台用彩色小图。
+ */
 function iconPath(): string {
-  if (app.isPackaged) return join(process.resourcesPath, 'resources', 'tray.png')
-  return join(__dirname, '../../resources/tray.png')
+  const name = isMac ? 'trayTemplate.png' : 'tray.png'
+  if (app.isPackaged) return join(process.resourcesPath, 'resources', name)
+  return join(__dirname, '../../resources', name)
 }
 
 let tray: Tray | null = null
@@ -112,12 +119,14 @@ export function refreshTrayMenu(): void {
 export function createTray(prefsChanged?: () => void): Tray {
   onPrefsChanged = prefsChanged ?? null
   const image = nativeImage.createFromPath(iconPath())
-  const instance = new Tray(
-    image.isEmpty() ? nativeImage.createEmpty() : image.resize({ width: 16, height: 16 })
-  )
+  const trayImage = image.isEmpty() ? nativeImage.createEmpty() : image
+  if (isMac) trayImage.setTemplateImage(true)
+  // macOS 上不能 resize：会丢掉 @2x 的 2 倍图，菜单栏上会糊
+  const instance = new Tray(isMac ? trayImage : trayImage.resize({ width: 16, height: 16 }))
   instance.setToolTip('Todo Tracker')
   instance.setContextMenu(buildMenu())
-  instance.on('click', () => showMainWindow())
+  // macOS：setContextMenu 后左键点击即弹菜单，再绑定 click 会同时弹出菜单与主窗口
+  if (!isMac) instance.on('click', () => showMainWindow())
   tray = instance
   return instance
 }
