@@ -174,7 +174,10 @@ Actions → Release → **Run workflow**（workflow_dispatch）：
   接入点已经留好：`forge.config.js` 的 nsis maker 支持 `config.codesign`
   （`certificateFile` + `certificatePassword`），并在生成 `app-update.yml` 时传 `publisherName`
   —— 注意**设了 `publisherName` 就会强制校验签名**，必须与签名一起开。
-- **macOS / Linux 分发**：`forge.config.js` 里 zip / deb / rpm maker 已在，
-  补一个 macOS 的 CI job（需要 Apple 开发者证书做公证）即可。
+- **macOS 分发**：`npm run make` 已能在 mac 上产出 `Todo Tracker.app` 的 zip（maker-zip，
+  `platforms: ['darwin']`；未签名，首次打开需「右键 → 打开」）。要做到应用内更新（`latest-mac.yml`）
+  与免提示安装，需要 Apple 开发者证书签名 + 公证，再把 macOS 的构建 job 并入本发布流程。
+- **Linux 分发**：`forge.config.js` 里 deb / rpm maker 已限定 `platforms: ['linux']`，
+  补一个 Linux CI job 即可。
 - **灰度发布 / 多通道**：maker 的 `updater.channel` 支持切成 `beta`，
   客户端按 channel 读 `beta.yml`，可实现内测通道。

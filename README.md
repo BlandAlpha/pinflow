@@ -1,6 +1,6 @@
 # Todo Tracker
 
-本地优先的 Windows 桌面 Todo 管理器：全局快速捕获 → 系统自动组织 → 你只在需要时纠正。
+本地优先的桌面 Todo 管理器（Windows / macOS）：全局快速捕获 → 系统自动组织 → 你只在需要时纠正。
 
 - 无账号、无云同步、无遥测，数据 100% 存储在本地 SQLite。
 - 技术栈：Electron 33 + React 18 + TypeScript + Vite (electron-vite) + better-sqlite3 + Zustand + Tailwind CSS + shadcn/ui（Radix 原语），打包用 Electron Forge。
@@ -43,7 +43,8 @@ preload 阶段同步取主题快照，避免首帧闪烁。切换入口在侧边
 ```bash
 npm install            # 安装依赖（自动跳过脚本）
 node node_modules/electron/install.js   # 下载 Electron 二进制（如未下载）
-node scripts/fetch-native.mjs           # 下载 better-sqlite3 预编译二进制（Electron ABI）
+node scripts/fetch-native.mjs           # 换成 Electron ABI 的 better-sqlite3（每次 npm install 之后都要跑，
+                                        # 否则 npm 装的是 Node ABI 版本，dev 会因为 ABI 不匹配连窗口都起不来）
 npm run dev            # 启动开发模式（主进程 + 渲染进程热更新）
 ```
 
@@ -54,6 +55,8 @@ npm run dev            # 启动开发模式（主进程 + 渲染进程热更新�
 >   `ELECTRON_RUN_AS_NODE` 环境变量后再运行。
 > - 下载 Electron 二进制缓慢时使用镜像（已写入 `.npmrc`）：
 >   `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
+> - macOS 无需额外步骤：脚本会自动取 `Electron.app/Contents/MacOS/Electron` 的 ABI，
+>   并从官方 release 下载 `better-sqlite3-…-darwin-arm64.tar.gz`（Intel 机器则是 `darwin-x64`）。
 
 ```bash
 npm run typecheck      # TypeScript 类型检查（src + shared + electron + tests）
@@ -89,16 +92,21 @@ npm run make           # 构建并打包 NSIS 安装向导 (forge-dist/make/nsis
 那是 Electron 运行时的依赖）：
 
 ```bash
+# --platform / --arch 按当前机器填：Windows 是 win32-x64，macOS 是 darwin-arm64（Apple Silicon）
 npx prebuild-install -r node --arch x64 --platform win32 --dir node_modules/better-sqlite3 --target_path /tmp/bs3-node
 ```
 然后把产物放到 `node_modules/better-sqlite3/build/Release/` 下运行 `npm test`，跑完还原。
 
 ## 数据库位置
 
-SQLite 数据库：`%APPDATA%/todo-tracker/todo.db`
-（ Electron `app.getPath('userData')`，包含 WAL 日志文件）。
-偏好（主题、当前空间）：`%APPDATA%/todo-tracker/prefs.json`。
-窗口位置状态：`%APPDATA%/todo-tracker/window-state.json`。
+SQLite 数据库：`todo.db`（含 WAL 日志文件）；偏好（主题、当前空间）：`prefs.json`；
+窗口位置状态：`window-state.json`。三者都在 Electron 的 `app.getPath('userData')` 目录下：
+
+| 平台 | 目录 | 说明 |
+| --- | --- | --- |
+| Windows | `%APPDATA%/todo-tracker/` | 产品名 `todo-tracker` |
+| macOS | `~/Library/Application Support/Todo Tracker/` | 产品名 `Todo Tracker`（mac 惯例带空格） |
+
 界面内可通过设置里的「数据库位置」按钮直接打开所在目录。
 
 Schema 版本由 `user_version` 管理，启动时增量迁移（当前 v5），既有数据不丢失：
@@ -108,16 +116,33 @@ v2 新增 `classified` / `sort_order`，v3–v4 调整白板坐标系，v5 新�
 
 | 快捷键 | 作用 |
 | --- | --- |
-| `Ctrl + Shift + Space` | 全局快速捕获（任何应用下可用），Enter 保存 / Esc 取消 |
+| `Ctrl + Shift + Space` / macOS `⌘ + Shift + Space` | 全局快速捕获（任何应用下可用），Enter 保存 / Esc 取消 |
 | `N` | 聚焦主窗口快速新增输入框 |
 | `↑` / `↓` | 在任务列表中移动选择 |
 | `Space` | 完成 / 取消完成选中任务 |
 | `Enter` / `E` | 打开选中任务详情 |
 | `1` – `4` | 将选中任务移到对应象限的中心（白板） |
-| `Alt + 1` – `Alt + 9` | 切换到第 N 个空间 |
-| `Delete` | 归档选中任务（可撤销） |
-| `Shift + Delete` | 彻底删除选中任务（可撤销） |
+| `Alt + 1` – `Alt + 9` / macOS `Option + 1` – `Option + 9` | 切换到第 N 个空间 |
+| `Delete` / macOS `Backspace` | 归档选中任务（可撤销） |
+| `Shift + Delete` / macOS `Shift + Backspace` | 彻底删除选中任务（可撤销） |
 | `Esc` | 关闭详情 / 清除选择 |
+
+> macOS 上带 Option 的组合由 `event.code` 判定 —— Option+数字会产出特殊字符（Option+1 = `¡`），
+> 拿 `event.key` 是匹配不到数字的。
+
+## 平台差异（Windows / macOS）
+
+| 方面 | Windows | macOS |
+| --- | --- | --- |
+| 主窗口 | 完全无边框，标题栏与最小化 / 最大化 / 关闭按钮全部自绘 | `titleBarStyle: hiddenInset`：保留系统交通灯与原生圆角阴影，标题栏只做拖动区 |
+| 应用菜单 | 无（`autoHideMenuBar`，不用菜单栏） | 屏幕顶部 App / Edit / Window 三组菜单（⌘C / ⌘V / ⌘Q / ⌘W 依赖 Edit role） |
+| 系统托盘 | 彩色 16px 图标，左键唤起主窗口 | 菜单栏模板图（自动跟随深浅色），左键即弹菜单 |
+| 快速捕获快捷键 | `Ctrl+Shift+Space` | `⌘+Shift+Space`（accelerator 用 `CommandOrControl`） |
+| 捕获窗口 | 普通置顶窗 | 额外 `visibleOnAllWorkspaces` + `floating` 层级，切桌面 / 全屏应用下也能浮出 |
+| 全屏屏蔽快捷键 | PowerShell 轮询前台全屏窗口 | 不启用（检测实现依赖 Win32 API），快捷键恒可用 |
+| 开机自启 | electron-auto-launch，失败回退原生 HKCU 项 | Electron 原生登录项（系统登录项不携带命令行参数，登录后正常开主窗口） |
+| 应用图标 | `resources/icon.ico`（多尺寸） | `resources/icon.icns`（macOS 上由 `node scripts/make-icons.mjs` 生成） |
+| 应用内更新 | electron-updater + NSIS，完整可用 | 未接入：分发的是未签名 zip，要做自动更新需先 Apple 签名 + 公证（`latest-mac.yml`） |
 
 ## 优先级算法
 
@@ -138,12 +163,14 @@ v2 新增 `classified` / `sort_order`，v3–v4 调整白板坐标系，v5 新�
 shared/               类型与纯逻辑（渲染/主进程共用，不依赖 Electron）
   types.ts            任务/步骤/筛选等数据模型
   ipc.ts              IPC 通道名与 API 签名（preload 桥接的契约）
+  platform.ts         平台判定 + 快速捕获快捷键的 accelerator / 展示文案
   priority.ts         优先级评分（含单元测试）
   board.ts            白板坐标系：位置 <-> 象限/等级、象限中心、自动排布与重叠避让
   quadrant.ts         象限文案/配色元数据（仅用于命名与兼容）
 electron/main/        主进程
   index.ts            应用生命周期、全局快捷键、单实例、冒烟测试
-  windows.ts          主窗口（无边框）与快速捕获小窗、窗口状态持久化
+  windows.ts          主窗口（无边框 / mac 原生交通灯）与快速捕获小窗、窗口状态持久化
+  menu.ts             macOS 应用菜单（Edit role 是 ⌘C/⌘V 生效的前提）
   tray.ts             系统托盘
   db.ts               SQLite 建表/迁移 + 全部 CRUD（含 spaces 表与任务归属）
   prefs.ts            本地偏好（主题、当前空间）读写与原生主题同步
@@ -170,8 +197,10 @@ src/                  渲染进程 (React)
 
 ```bash
 npm run build      # 只构建：产物在 app-build/（main / preload / renderer）
-npm run package    # 构建 + 免安装版：forge-dist/todo-tracker-win32-x64/todo-tracker.exe（可直接运行）
-npm run make       # 构建 + NSIS 安装向导：forge-dist/make/nsis/x64/todo-tracker-<版本>-setup.exe
+npm run package    # 构建 + 免安装版：forge-dist/<产品名>-<平台>-<arch>/ 内的可执行文件
+npm run make       # 构建 + 分发包（maker 按当前平台自动筛）：
+                   #   Windows → forge-dist/make/nsis/x64/todo-tracker-<版本>-setup.exe
+                   #   macOS   → forge-dist/make/zip/darwin/<arch>/Todo Tracker-darwin-<arch>-<版本>.zip
 ```
 
 打包走 Electron Forge（`forge.config.js`）：
@@ -179,11 +208,16 @@ npm run make       # 构建 + NSIS 安装向导：forge-dist/make/nsis/x64/todo-
 - `outDir: forge-dist` —— Forge 输出目录；electron-vite 输出到 `app-build/`，避开 Forge 硬编码忽略根目录 `out/` 的规则。
 - `packagerConfig.asar: true` + `plugin-auto-unpack-natives` —— 原生模块 `better_sqlite3.node` 自动从 asar 解包。
 - `plugin-fuses` —— 关闭 `RunAsNode` / Node CLI 参数、开启 asar 完整性校验（打包期固化，不依赖签名）。
-- NSIS 向导式安装（`@felixrieseberg/electron-forge-maker-nsis`）：中文向导 + 许可页 + 可选安装目录；
-  仅当前用户安装（不需要管理员），卸载时**保留用户数据**。
+- NSIS 向导式安装（`@felixrieseberg/electron-forge-maker-nsis`，`platforms: ['win32']`）：
+  中文向导 + 许可页 + 可选安装目录；仅当前用户安装（不需要管理员），卸载时**保留用户数据**。
+- macOS 分发用 `maker-zip`（`platforms: ['darwin']`），产出 `Todo Tracker.app` 的压缩包；
+  maker 的 `platforms` 必须显式写，否则在 mac 上跑 `make` 也会去拉 NSIS 引擎然后失败。
 - `updater` 配置 —— 同时生成随包分发的 `resources/app-update.yml` 与安装包旁的 `latest.yml`，
   这两份文件是应用内更新的依据（详见下文）。
-- 不做代码签名：安装包首次运行会被 SmartScreen 提示，属正常现象。
+- 不做代码签名：Windows 安装包首次运行会被 SmartScreen 提示；macOS 的 app 从 zip 解出来
+  首次打开需要「右键 → 打开」（或 `xattr -dr com.apple.quarantine <app>`），都属正常现象。
+- 应用图标按平台取：Windows 用 `resources/icon.ico`，macOS 用 `resources/icon.icns`
+  （在 mac 上执行 `node scripts/make-icons.mjs` 生成，依赖系统自带的 `iconutil`）。
 
 构建前请确保 `node scripts/fetch-native.mjs` 已成功（better-sqlite3 使用
 `electron-v130` 预编译版本，与 Electron 33 匹配）。原生模块不做源码重建，无 MSVC 也能打包。
