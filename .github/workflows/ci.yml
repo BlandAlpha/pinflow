@@ -17,9 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22（ABI v127）：better-sqlite3 只为部分 ABI 提供官方预编译包，
+      # v127 有、v115（Node 20）没有 —— 用 20 会回退到 node-gyp 本地编译，
+      # 而 GitHub Windows runner 上的 VS 18 不被 @electron/node-gyp 的版本表识别，
+      # 装依赖就直接失败（macOS 只是恰好有 Clang 才编译得过去）
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: 安装依赖

@@ -23,9 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22：与 ci.yml 同样的原因 —— better-sqlite3 只有 v127（Node 22）
+      # 及以上的官方预编译包，Node 20（v115）会回退到本地编译并失败
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: 安装依赖
