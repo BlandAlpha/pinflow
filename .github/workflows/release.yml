@@ -79,16 +79,22 @@ jobs:
         env:
           # 写进 resources/app-update.yml，决定客户端去哪查更新
           UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL }}
+          # 兜底：electron-builder 万一仍走到 GitHub publisher（例如配置被 maker 覆盖），
+          # 有这个 token 就不会因缺少 GH_TOKEN 直接中断；它只在存在 draft release 时才上传，
+          # 而我们的 Release 由 publish job 建成正式版，所以不会重复上传
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 收集发布产物
         shell: bash
         run: |
           mkdir -p dist-win
-          cp forge-dist/make/nsis/x64/* dist-win/
+          # 产物实际落在 forge-dist/make/nsis/make/ 下（此前文档写的 nsis/x64/ 是错的），
+          # 这里按类型收集，免得再被目录层级变化绊住
+          find forge-dist/make/nsis -type f \( -name '*.exe' -o -name '*.blockmap' -o -name 'latest.yml' \) -exec cp {} dist-win/ \;
           echo "--- 产物 ---"
           ls -lh dist-win/
           # 少了 latest.yml 客户端就永远检测不到更新，这里直接拦住
-          test -f dist-win/latest.yml || { echo "::error::未生成 latest.yml，检查 forge.config.js 的 updater 配置"; exit 1; }
+          test -f dist-win/latest.yml || { echo "::error::未生成 latest.yml，检查 forge.config.js 的 updater / publish 配置"; exit 1; }
           test -n "$(ls dist-win/*.exe 2>/dev/null)" || { echo "::error::未找到安装包"; exit 1; }
 
       - name: 上传到 Cloudflare R2

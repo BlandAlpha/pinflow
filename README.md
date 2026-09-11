@@ -64,7 +64,7 @@ npm run test           # 单元测试 (vitest)：优先级评分 + 视图模型 
 npm run build          # 构建到 app-build/
 npm run smoke          # 构建 + 自动化冒烟测试（截图输出到 .smoke/）
 npm run package        # 打包免安装版 (forge-dist/todo-tracker-win32-x64/todo-tracker.exe)
-npm run make           # 构建并打包 NSIS 安装向导 (forge-dist/make/nsis/x64/)
+npm run make           # 构建并打包 NSIS 安装向导 (forge-dist/make/nsis/make/)
 ```
 
 冒烟测试可选参数：
@@ -199,7 +199,7 @@ src/                  渲染进程 (React)
 npm run build      # 只构建：产物在 app-build/（main / preload / renderer）
 npm run package    # 构建 + 免安装版：forge-dist/<产品名>-<平台>-<arch>/ 内的可执行文件
 npm run make       # 构建 + 分发包（maker 按当前平台自动筛）：
-                   #   Windows → forge-dist/make/nsis/x64/todo-tracker-<版本>-setup.exe
+                   #   Windows → forge-dist/make/nsis/make/todo-tracker-<版本>-setup.exe
                    #   macOS   → forge-dist/make/zip/darwin/<arch>/Todo Tracker-darwin-<arch>-<版本>.zip
 ```
 

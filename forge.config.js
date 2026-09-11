@@ -80,6 +80,19 @@ module.exports = {
           // 安装包名去空格：latest.yml 里的 url 会被客户端按 URL 使用，
           // 「Setup 0.1.0.exe」带空格和点号容易在各类代理/网关处出岔子。
           artifactName: 'todo-tracker-${version}-setup.${ext}',
+          // 必须显式声明 publish：不声明时 electron-builder 在 CI 环境会自动套用
+          // 「onTagOrDraft」策略，进而去推断 GitHub publisher，缺少 GH_TOKEN 就直接抛错中断构建。
+          //
+          // 为什么选 generic：它对 electron-builder 来说「有配置但无 publisher」
+          // （createPublisher 对 generic 返回 null），于是只打印一句 not published 就放过，
+          // 而 latest.yml / app-update.yml 仍会正常生成 —— 这点很重要，
+          // 若改成 publish: null 则会连 publishConfigs 一起没有，latest.yml 就不会生成了。
+          // 真正的上传交给 workflow 里的 aws s3 cp（R2）。
+          publish: {
+            provider: 'generic',
+            url: UPDATE_BASE_URL,
+            channel: 'latest'
+          },
           // NSIS 的安装 / 卸载程序图标走 electron-builder 的 win.icon；
           // 不配的话日志会提示 "default Electron icon is used"，安装包是 Electron 默认图标
           // （packagerConfig.icon 只管包内那个 exe，两者不互相替代）。
