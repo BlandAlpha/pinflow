@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CAPTURE_SHORTCUT_ACCELERATOR } from '@shared/platform'
 import type { AppPrefs } from '@shared/types'
 
 /**
@@ -63,7 +64,8 @@ vi.mock('../electron/main/fullscreen', () => ({
   }
 }))
 
-const ACCEL = 'Ctrl+Shift+Space'
+// 注册用的是跨平台 accelerator（CommandOrControl），不是展示文案
+const ACCEL = CAPTURE_SHORTCUT_ACCELERATOR
 
 async function load() {
   vi.resetModules()

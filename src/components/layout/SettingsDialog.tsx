@@ -27,6 +27,7 @@ import type {
 } from '@shared/types'
 import { useTodos } from '@/store/todos'
 import { SPACE_COLOR_LABELS, SPACE_ICON_LABELS, SPACE_ICON_MAP, spaceColor } from '@/lib/space'
+import { CAPTURE_SHORTCUT_LABEL } from '@/lib/shortcut'
 import { cn } from '@/lib/utils'
 import { ThemeSwitcher } from '@/components/theme/ThemeSwitcher'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -41,7 +42,10 @@ import {
 import { Button } from '@/components/ui/button'
 import * as DropdownMenu from '@/components/ui/dropdown-menu'
 
-const SHORTCUT = 'Ctrl+Shift+Space'
+/** 显示文案跟着平台走：macOS 上注册的其实是 ⌘⇧Space（CommandOrControl） */
+const SHORTCUT = CAPTURE_SHORTCUT_LABEL
+/** 「全屏程序时屏蔽快捷键」依赖 Win32 API 检测前台全屏窗口，macOS 上不启用 */
+const isMac = window.api?.platform === 'darwin'
 const GITHUB_URL = 'https://github.com/BlandAlpha'
 
 /** 打开设置时先用它渲染，拿到主进程偏好后立刻覆盖（避免首帧空白） */
@@ -144,22 +148,24 @@ export function SettingsDialog({
                 />
               </div>
             </Row>
-            <Row
-              icon={<Gamepad2 className="h-3.5 w-3.5" />}
-              label="全屏程序时屏蔽快捷键"
-              hint={shortcutHint}
-            >
-              <Checkbox
-                checked={prefs.fullscreenGuard}
-                disabled={!prefs.captureShortcut}
-                onCheckedChange={(v) =>
-                  void window.api.setFullscreenGuard(v === true).then((p) => {
-                    setPrefs(p)
-                    void refreshShortcutState()
-                  })
-                }
-              />
-            </Row>
+            {!isMac && (
+              <Row
+                icon={<Gamepad2 className="h-3.5 w-3.5" />}
+                label="全屏程序时屏蔽快捷键"
+                hint={shortcutHint}
+              >
+                <Checkbox
+                  checked={prefs.fullscreenGuard}
+                  disabled={!prefs.captureShortcut}
+                  onCheckedChange={(v) =>
+                    void window.api.setFullscreenGuard(v === true).then((p) => {
+                      setPrefs(p)
+                      void refreshShortcutState()
+                    })
+                  }
+                />
+              </Row>
+            )}
           </Group>
 
           <UpdateSection version={version} update={update} onStatus={setUpdate} />

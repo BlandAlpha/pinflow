@@ -15,6 +15,7 @@ import { QUADRANT_META } from '@shared/quadrant'
 import { useTodos } from '@/store/todos'
 import { useVisibleTodos } from '@/hooks/useVisibleTodos'
 import { cn } from '@/lib/utils'
+import { CAPTURE_SHORTCUT_LABEL } from '@/lib/shortcut'
 import { dueTone, formatDue } from '@/lib/date'
 import { Button } from '@/components/ui/button'
 
@@ -459,7 +460,7 @@ export function Whiteboard() {
           {placed.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center">
               <p className="text-[13px] text-muted-foreground">
-                还没有任务。按 Ctrl+Shift+Space 记下一件事。
+                还没有任务。按 {CAPTURE_SHORTCUT_LABEL} 记下一件事。
               </p>
             </div>
           )}

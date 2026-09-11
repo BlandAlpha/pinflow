@@ -1,4 +1,6 @@
 import { globalShortcut } from 'electron'
+import { CAPTURE_SHORTCUT_ACCELERATOR, captureShortcutLabel } from '@shared/platform'
+import type { Platform } from '@shared/platform'
 import type { ShortcutState } from '@shared/types'
 import { getPrefs, setPrefs } from './prefs'
 import {
@@ -17,9 +19,15 @@ import {
  *
  * 任何时候都只以 prefs + 当前全屏状态推导出"该不该注册"，注册动作集中在这里，
  * 避免出现"设置说开着、实际没注册"这类对不上的状态。
+ *
+ * 平台差异：注册用 accelerator（CommandOrControl，mac 上自动是 ⌘），
+ * 展示用 label（mac 上显示 ⌘⇧Space），两者不能混用。
  */
 
-export const CAPTURE_SHORTCUT = 'Ctrl+Shift+Space'
+/** 注册用 accelerator */
+export const CAPTURE_SHORTCUT_ACCEL = CAPTURE_SHORTCUT_ACCELERATOR
+/** 展示用文案（托盘菜单等） */
+export const CAPTURE_SHORTCUT = captureShortcutLabel(process.platform as Platform)
 
 let trigger: (() => void) | null = null
 let registered = false
@@ -36,12 +44,12 @@ export function syncShortcut(): boolean {
   const want = !!trigger && prefs.captureShortcut && !suspendedByFullscreen()
 
   if (want && !registered) {
-    registered = globalShortcut.register(CAPTURE_SHORTCUT, () => trigger?.())
+    registered = globalShortcut.register(CAPTURE_SHORTCUT_ACCEL, () => trigger?.())
     if (!registered) {
       console.warn(`[TodoTracker] 全局快捷键注册失败（可能被其它程序占用）: ${CAPTURE_SHORTCUT}`)
     }
   } else if (!want && registered) {
-    globalShortcut.unregister(CAPTURE_SHORTCUT)
+    globalShortcut.unregister(CAPTURE_SHORTCUT_ACCEL)
     registered = false
   }
   return registered

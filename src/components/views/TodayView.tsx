@@ -7,6 +7,7 @@ import { groupToday, isInboxTask } from '@/lib/visible'
 import { quadrantAt, pointOf } from '@shared/board'
 import { QUADRANT_META } from '@shared/quadrant'
 import { cn } from '@/lib/utils'
+import { CAPTURE_SHORTCUT_LABEL } from '@/lib/shortcut'
 import { dueTone, formatDue } from '@/lib/date'
 import { EmptyState } from '@/components/task/EmptyState'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -158,7 +159,7 @@ export function TodayView() {
     return (
       <EmptyState
         title="今天没有待办"
-        description="用 Ctrl+Shift+Space 快速记下一件事，它会自动出现在这里"
+        description={`用 ${CAPTURE_SHORTCUT_LABEL} 快速记下一件事，它会自动出现在这里`}
       />
     )
   }

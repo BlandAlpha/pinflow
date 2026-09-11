@@ -1,12 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/ipc'
 import type { CaptureApi, TodoApi } from '@shared/ipc'
+import type { Platform } from '@shared/platform'
 import type { AppPrefs, Todo, UpdateStatus } from '@shared/types'
 import { installThemeBootstrap } from './theme'
 
 const themeSnapshot = installThemeBootstrap()
 
 const api: TodoApi & { themeSnapshot: typeof themeSnapshot } = {
+  // 渲染进程没有 process：平台值在这里同步注入，首帧即可用于布局与文案
+  platform: process.platform as Platform,
   listTodos: (): Promise<Todo[]> => ipcRenderer.invoke(IPC.TODOS_LIST),
   createTodo: (input) => ipcRenderer.invoke(IPC.TODOS_CREATE, input),
   updateTodo: (input) => ipcRenderer.invoke(IPC.TODOS_UPDATE, input),

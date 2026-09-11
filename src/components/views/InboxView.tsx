@@ -1,5 +1,6 @@
 import { useTodos } from '@/store/todos'
 import { useVisibleTodos } from '@/hooks/useVisibleTodos'
+import { CAPTURE_SHORTCUT_LABEL } from '@/lib/shortcut'
 import { QuickAdd } from '@/components/task/QuickAdd'
 import { TaskCard } from '@/components/task/TaskCard'
 import { EmptyState } from '@/components/task/EmptyState'
@@ -23,7 +24,7 @@ export function InboxView() {
       {todos.length === 0 ? (
         <EmptyState
           title="收件箱是空的"
-          description="Ctrl+Shift+Space 随时记下一件事，稍后再来整理"
+          description={`${CAPTURE_SHORTCUT_LABEL} 随时记下一件事，稍后再来整理`}
         />
       ) : (
         <ScrollArea className="flex-1">

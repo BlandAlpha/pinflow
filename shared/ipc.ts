@@ -1,3 +1,4 @@
+import type { Platform } from './platform'
 import type {
   AppPrefs,
   CreateSpaceInput,
@@ -83,6 +84,8 @@ export const IPC = {
 
 /** 主窗口渲染进程可用 API */
 export interface TodoApi {
+  /** 当前运行平台（preload 同步注入）：标题栏留白、快捷键文案等平台差异都据此判断 */
+  readonly platform: Platform
   listTodos(): Promise<Todo[]>
   createTodo(input: CreateTodoInput): Promise<Todo>
   updateTodo(input: UpdateTodoInput): Promise<Todo>
