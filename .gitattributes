@@ -1,0 +1,28 @@
+# 换行符与文本 / 二进制的统一约定
+#
+# 背景：开发机同时有 Windows 与 macOS。没有这份文件时 git 不做任何转换
+# （core.autocrlf 也没开），「谁的工作区是什么行尾，提交上去就是什么行尾」——
+# 编辑器自动保存一次就能把整个文件变成「每行都改了」的 diff
+# （曾一次性污染 6 个文件，其中 4 个实际零内容改动）。
+#
+# 约定：仓库内与工作区一律 LF；只有 Windows 专有脚本保留 CRLF。
+# text=auto 还带来一个好处：即使工作区被某个工具写成了 CRLF，
+# git 也会先规范化再比较，不会产生行尾噪音 diff。
+* text=auto eol=lf
+
+# Windows 专有脚本必须 CRLF，cmd.exe 用 LF 解析会出问题
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制：不做行尾转换，也不参与文本 diff / 合并
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.node binary
+*.db binary
+*.zip binary

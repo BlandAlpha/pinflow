@@ -1,0 +1,18 @@
+# 编辑器层面的同一份约定：保存时直接写 LF，从源头避免行尾噪音
+# （与 .gitattributes 配套；VSCode 需装 EditorConfig 扩展，或把 files.eol 设为 \n）
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.md]
+# Markdown 里行尾两个空格是「硬换行」语法，不能删
+trim_trailing_whitespace = false
+
+[*.{bat,cmd,ps1}]
+end_of_line = crlf
