@@ -91,6 +91,11 @@ jobs:
           # 产物实际落在 forge-dist/make/nsis/make/ 下（此前文档写的 nsis/x64/ 是错的），
           # 这里按类型收集，免得再被目录层级变化绊住
           find forge-dist/make/nsis -type f \( -name '*.exe' -o -name '*.blockmap' -o -name 'latest.yml' \) -exec cp {} dist-win/ \;
+          # 固定下载名副本：官网 / 文档里给人的永久链接。
+          # 每次发版覆盖同一个对象（不会随版本累积），链接因此不必跟着版本号走。
+          # 应用内更新仍然走 latest.yml 里带版本号的那个路径，两者互不影响。
+          VERSION=$(node -p "require('./package.json').version")
+          cp "dist-win/pinflow-${VERSION}-setup.exe" dist-win/pinflow-setup.exe
           echo "--- 产物 ---"
           ls -lh dist-win/
           # 少了 latest.yml 客户端就永远检测不到更新，这里直接拦住
@@ -186,6 +191,8 @@ jobs:
           for f in forge-dist/make/zip/darwin/*/*.zip; do
             ARCH=$(basename "$(dirname "$f")")
             cp "$f" "dist-mac/pinflow-${VERSION}-mac-${ARCH}.zip"
+            # 固定下载名副本（同 windows job）：官网 / 文档里给人的永久链接
+            cp "$f" "dist-mac/pinflow-macos-${ARCH}.zip"
           done
           echo "--- 产物 ---"
           ls -lh dist-mac/
