@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { BrowserWindow, nativeTheme } from 'electron'
+import { IPC } from '@shared/ipc'
 import type { AppPrefs, ThemeMode } from '@shared/types'
 
 /** 与 CSS 变量保持一致，避免窗口出现瞬间白/闪烁 */
@@ -9,7 +10,12 @@ const WINDOW_BG: Record<'light' | 'dark', string> = {
   light: '#fafafa'
 }
 
-const DEFAULT_PREFS: AppPrefs = { theme: 'system', activeSpaceId: null }
+const DEFAULT_PREFS: AppPrefs = {
+  theme: 'system',
+  activeSpaceId: null,
+  captureShortcut: true,
+  fullscreenGuard: true
+}
 
 let prefsFile = ''
 
@@ -50,6 +56,14 @@ export function setPrefs(patch: Partial<AppPrefs>): AppPrefs {
 /** 记住当前所在空间（跨窗口共享：快速捕获窗口也用得到） */
 export function setActiveSpace(id: string | null): AppPrefs {
   return setPrefs({ activeSpaceId: id })
+}
+
+/** 偏好变更广播：托盘 / 设置弹窗两处开关要互相看见对方的改动 */
+export function broadcastPrefsChanged(): void {
+  const prefs = getPrefs()
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(IPC.PREFS_CHANGED, prefs)
+  }
 }
 
 export function prefsPath(): string {

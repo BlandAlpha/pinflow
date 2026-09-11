@@ -5,6 +5,7 @@ import type {
   Quadrant,
   Space,
   SpaceDeleteResult,
+  ShortcutState,
   Step,
   ThemeMode,
   Todo,
@@ -53,6 +54,12 @@ export const IPC = {
   APP_GET_PREFS: 'app:getPrefs',
   APP_SET_THEME: 'app:setTheme',
   APP_SET_ACTIVE_SPACE: 'app:setActiveSpace',
+  /** 快速捕获快捷键开关 / 全屏屏蔽开关 / 运行时状态 */
+  APP_SET_CAPTURE_SHORTCUT: 'app:setCaptureShortcut',
+  APP_SET_FULLSCREEN_GUARD: 'app:setFullscreenGuard',
+  APP_GET_SHORTCUT_STATE: 'app:getShortcutState',
+  /** 主进程 -> 渲染进程：偏好变更（托盘菜单也会改，需双向同步） */
+  PREFS_CHANGED: 'app:prefsChanged',
 
   CAPTURE_CLOSE: 'capture:close',
   CAPTURE_SUBMIT: 'capture:submit',
@@ -112,6 +119,14 @@ export interface TodoApi {
   getPrefs(): Promise<AppPrefs>
   setTheme(theme: ThemeMode): Promise<AppPrefs>
   setActiveSpace(id: string | null): Promise<AppPrefs>
+  /** 启用/停用全局快速捕获快捷键 */
+  setCaptureShortcut(enabled: boolean): Promise<AppPrefs>
+  /** 全屏程序时是否自动屏蔽快捷键（防游戏误触） */
+  setFullscreenGuard(enabled: boolean): Promise<AppPrefs>
+  /** 快捷键运行时状态：是否真的注册上、是否被全屏临时屏蔽 */
+  getShortcutState(): Promise<ShortcutState>
+  /** 订阅偏好变更（托盘右键菜单里的开关同样会触发） */
+  onPrefsChanged(cb: (prefs: AppPrefs) => void): () => void
   /** 订阅「数据已变更」（来自快速捕获窗口等） */
   onDataChanged(cb: () => void): () => void
   /** 订阅「新建任务」请求（系统托盘菜单） */

@@ -5,6 +5,7 @@ import type {
   CreateSpaceInput,
   CreateTodoInput,
   Quadrant,
+  ShortcutState,
   Step,
   ThemeMode,
   Todo,
@@ -14,12 +15,15 @@ import type {
 import * as db from './db'
 import {
   applyTheme,
+  broadcastPrefsChanged,
   getPrefs,
   resolvedTheme,
   setActiveSpace,
   setTheme
 } from './prefs'
 import { getAutoLaunch, setAutoLaunch } from './autolaunch'
+import { getShortcutState, setCaptureShortcutEnabled, setFullscreenGuardEnabled } from './shortcut'
+import { refreshTrayMenu } from './tray'
 
 /** preload 首帧同步读取的主题快照 */
 export interface ThemeSnapshot {
@@ -207,6 +211,20 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.APP_SET_ACTIVE_SPACE, (_e, id: string | null): AppPrefs =>
     setActiveSpace(id)
   )
+  // 快捷键开关：改完立刻同步注册状态，并把偏好广播给其它窗口（托盘菜单也要跟着变）
+  ipcMain.handle(IPC.APP_SET_CAPTURE_SHORTCUT, (_e, enabled: boolean): AppPrefs => {
+    setCaptureShortcutEnabled(enabled)
+    broadcastPrefsChanged()
+    refreshTrayMenu()
+    return getPrefs()
+  })
+  ipcMain.handle(IPC.APP_SET_FULLSCREEN_GUARD, (_e, enabled: boolean): AppPrefs => {
+    setFullscreenGuardEnabled(enabled)
+    broadcastPrefsChanged()
+    refreshTrayMenu()
+    return getPrefs()
+  })
+  ipcMain.handle(IPC.APP_GET_SHORTCUT_STATE, (): ShortcutState => getShortcutState())
   ipcMain.handle(
     IPC.APP_SET_AUTO_LAUNCH,
     (_e, enabled: boolean): Promise<boolean> => setAutoLaunch(enabled)

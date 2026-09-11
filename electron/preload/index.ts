@@ -46,6 +46,16 @@ const api: TodoApi & { themeSnapshot: typeof themeSnapshot } = {
   getPrefs: (): Promise<AppPrefs> => ipcRenderer.invoke(IPC.APP_GET_PREFS),
   setTheme: (theme) => ipcRenderer.invoke(IPC.APP_SET_THEME, theme),
   setActiveSpace: (id) => ipcRenderer.invoke(IPC.APP_SET_ACTIVE_SPACE, id),
+  setCaptureShortcut: (enabled): Promise<AppPrefs> =>
+    ipcRenderer.invoke(IPC.APP_SET_CAPTURE_SHORTCUT, enabled),
+  setFullscreenGuard: (enabled): Promise<AppPrefs> =>
+    ipcRenderer.invoke(IPC.APP_SET_FULLSCREEN_GUARD, enabled),
+  getShortcutState: () => ipcRenderer.invoke(IPC.APP_GET_SHORTCUT_STATE),
+  onPrefsChanged: (cb) => {
+    const listener = (_e: unknown, prefs: AppPrefs) => cb(prefs)
+    ipcRenderer.on(IPC.PREFS_CHANGED, listener)
+    return () => ipcRenderer.removeListener(IPC.PREFS_CHANGED, listener)
+  },
 
   onDataChanged: (cb) => {
     const listener = () => cb()

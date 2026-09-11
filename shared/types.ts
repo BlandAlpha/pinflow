@@ -141,6 +141,20 @@ export interface AppPrefs {
   theme: ThemeMode
   /** 当前空间；为 null 时自动取第一个空间 */
   activeSpaceId: string | null
+  /** 是否启用全局快速捕获快捷键（默认开） */
+  captureShortcut: boolean
+  /** 运行全屏程序时自动屏蔽快速捕获快捷键，防游戏误触（默认开） */
+  fullscreenGuard: boolean
+}
+
+/** 快速捕获快捷键的运行时状态（设置里用它提示"被占用/已临时屏蔽"） */
+export interface ShortcutState {
+  /** 用户是否开启了这个快捷键 */
+  enabled: boolean
+  /** 当前是否真的注册上了（被别的程序占用时为 false） */
+  registered: boolean
+  /** 是否因为前台是全屏程序而被临时屏蔽 */
+  suspendedByFullscreen: boolean
 }
 
 /** 四象限编号：1 重要紧急 / 2 重要不紧急 / 3 不重要紧急 / 4 不重要不紧急 */

@@ -1,10 +1,11 @@
 import { join } from 'node:path'
 import { rmSync } from 'node:fs'
-import { app, globalShortcut, nativeTheme } from 'electron'
+import { app, nativeTheme } from 'electron'
 import squirrelStartup from 'electron-squirrel-startup'
 import { initDatabase, purgeExpiredArchived, refreshDueLevels } from './db'
 import { broadcastDataChanged, broadcastTheme, registerIpcHandlers } from './ipc'
-import { applyTheme, getPrefs, initPrefs, setTheme } from './prefs'
+import { applyTheme, broadcastPrefsChanged, getPrefs, initPrefs, setTheme } from './prefs'
+import { CAPTURE_SHORTCUT, disposeShortcut, initShortcut } from './shortcut'
 import { appState } from './state'
 import { createTray } from './tray'
 import { createMainWindow, showCaptureWindow, showMainWindow } from './windows'
@@ -14,9 +15,6 @@ import { createMainWindow, showCaptureWindow, showMainWindow } from './windows'
 if (squirrelStartup) {
   app.quit()
 }
-
-/** 全局快捷键 */
-const CAPTURE_SHORTCUT = 'Ctrl+Shift+Space'
 
 const singleInstance = app.requestSingleInstanceLock()
 if (!singleInstance) {
@@ -66,16 +64,11 @@ if (!singleInstance) {
     // 2. IPC
     registerIpcHandlers()
 
-    // 3. 系统托盘
-    createTray()
+    // 3. 系统托盘（菜单里的开关改动后广播给窗口，保持与设置弹窗一致）
+    createTray(() => broadcastPrefsChanged())
 
-    // 4. 全局快速捕获
-    const registered = globalShortcut.register(CAPTURE_SHORTCUT, () => {
-      showCaptureWindow()
-    })
-    if (!registered) {
-      console.warn(`[TodoTracker] 全局快捷键注册失败: ${CAPTURE_SHORTCUT}`)
-    }
+    // 4. 全局快速捕获（快捷键开关 + 全屏程序时自动屏蔽都在 shortcut 模块里管）
+    initShortcut(() => showCaptureWindow())
 
     // 5. 主窗口（开机自启时静默到托盘，不弹首帧）
     //    --startup 是 Windows 原生自启项的参数，--hidden 是 electron-auto-launch
@@ -88,8 +81,7 @@ if (!singleInstance) {
     //    只在未打包时加载：它会往 app.getAppPath()/.smoke 写文件，
     //    而打包后 app.getAppPath() 在 asar 内（只读）。
     if (!app.isPackaged && process.argv.includes('--smoke')) {
-      void import('./smoke').then((m) => m.runSmokeTest(CAPTURE_SHORTCUT))
-    }
+      void import('./smoke').then((m) => m.runSmokeTest(CAPTURE_SHORTCUT))    }
 
     app.on('activate', () => {
       showMainWindow()
@@ -102,6 +94,6 @@ if (!singleInstance) {
 
   app.on('before-quit', () => {
     appState.quitting = true
-    globalShortcut.unregisterAll()
+    disposeShortcut()
   })
 }

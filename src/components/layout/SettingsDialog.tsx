@@ -1,19 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
   Check,
   Database,
+  Gamepad2,
   Github,
   Heart,
+  Keyboard,
   Layers,
   Plus,
   Power,
   Trash2
 } from 'lucide-react'
 import { SPACE_COLORS, SPACE_ICONS } from '@shared/types'
-import type { Space, SpaceColor, SpaceIcon } from '@shared/types'
+import type { AppPrefs, ShortcutState, Space, SpaceColor, SpaceIcon } from '@shared/types'
 import { useTodos } from '@/store/todos'
 import { SPACE_COLOR_LABELS, SPACE_ICON_LABELS, SPACE_ICON_MAP, spaceColor } from '@/lib/space'
 import { cn } from '@/lib/utils'
@@ -33,6 +35,14 @@ import * as DropdownMenu from '@/components/ui/dropdown-menu'
 const SHORTCUT = 'Ctrl+Shift+Space'
 const GITHUB_URL = 'https://github.com/BlandAlpha'
 
+/** 打开设置时先用它渲染，拿到主进程偏好后立刻覆盖（避免首帧空白） */
+const FALLBACK_PREFS: AppPrefs = {
+  theme: 'system',
+  activeSpaceId: null,
+  captureShortcut: true,
+  fullscreenGuard: true
+}
+
 export function SettingsDialog({
   open,
   onOpenChange
@@ -44,14 +54,36 @@ export function SettingsDialog({
   const [dbPath, setDbPath] = useState('')
   const [version, setVersion] = useState('')
   const [confirmWipe, setConfirmWipe] = useState(false)
+  const [prefs, setPrefs] = useState<AppPrefs>(FALLBACK_PREFS)
+  const [shortcutState, setShortcutState] = useState<ShortcutState | null>(null)
   const clearAll = useTodos((s) => s.clearAll)
+
+  const refreshShortcutState = useCallback(async () => {
+    setShortcutState(await window.api.getShortcutState())
+  }, [])
 
   useEffect(() => {
     if (!open) return
     void window.api.getAutoLaunch().then(setAutoStart)
     void window.api.dbPath().then(setDbPath)
     void window.api.getVersion().then(setVersion)
-  }, [open])
+    void window.api.getPrefs().then(setPrefs)
+    void refreshShortcutState()
+    // 托盘右键菜单也能改这两个开关，改完要同步到这里
+    return window.api.onPrefsChanged((p) => {
+      setPrefs(p)
+      void refreshShortcutState()
+    })
+  }, [open, refreshShortcutState])
+
+  // 快捷键没生效时给出原因，避免"开关开着但按不出来"这种困惑
+  const shortcutHint = !prefs.captureShortcut
+    ? '已停用'
+    : shortcutState?.suspendedByFullscreen
+      ? '全屏中已屏蔽'
+      : shortcutState && !shortcutState.registered
+        ? '被其它程序占用'
+        : ''
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,10 +111,37 @@ export function SettingsDialog({
                 }}
               />
             </Row>
-            <Row label="快速捕获">
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
-                {SHORTCUT}
-              </kbd>
+            <Row icon={<Keyboard className="h-3.5 w-3.5" />} label="快速捕获">
+              <div className="flex items-center gap-2">
+                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
+                  {SHORTCUT}
+                </kbd>
+                <Checkbox
+                  checked={prefs.captureShortcut}
+                  onCheckedChange={(v) =>
+                    void window.api
+                      .setCaptureShortcut(v === true)
+                      .then(setPrefs)
+                      .then(() => refreshShortcutState())
+                  }
+                />
+              </div>
+            </Row>
+            <Row
+              icon={<Gamepad2 className="h-3.5 w-3.5" />}
+              label="全屏程序时屏蔽快捷键"
+              hint={shortcutHint}
+            >
+              <Checkbox
+                checked={prefs.fullscreenGuard}
+                disabled={!prefs.captureShortcut}
+                onCheckedChange={(v) =>
+                  void window.api.setFullscreenGuard(v === true).then((p) => {
+                    setPrefs(p)
+                    void refreshShortcutState()
+                  })
+                }
+              />
             </Row>
           </Group>
 
