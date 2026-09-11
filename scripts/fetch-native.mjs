@@ -4,15 +4,19 @@
  * 本机没有 MSVC / node-gyp 编译环境，因此不通过源码构建，
  * 而是直接从发布产物下载与当前 Electron ABI 匹配的 .node 文件。
  *
- * 用法：node scripts/fetch-native.mjs
+ * 下载用 curl（自动遵循系统代理），解压用纯 Node 实现 —— 不调用系统 tar。
+ *
+ * 用法：node scripts/fetch-native.mjs [--force]
+ *   --force  即使现有二进制在 Electron 里可用，也重新下载一份
+ *
+ * 注意：npm install 装出来的是 Node ABI 版本，跑 dev 会因 NODE_MODULE_VERSION
+ * 不匹配而起不来窗口，所以每次 npm install 之后都要跑一次本脚本。
  */
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { mkdirSync, existsSync, rmSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { gunzipSync } from 'node:zlib'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// pipeline unused
-// Readable unused
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const VERSION = JSON.parse(
@@ -80,15 +84,61 @@ const targets = [
 
 const outDir = join(ROOT, 'node_modules/better-sqlite3')
 const releaseDir = join(outDir, 'build/Release')
-const tmp = join(ROOT, '.native-cache', file)
 
-/** 使用 curl 下载（自动遵循系统代理配置） */
-function download(url, dest) {
-  mkdirSync(dirname(dest), { recursive: true })
-  const r = spawnSync('curl', ['-sSL', '--fail', '-o', dest, url], { encoding: 'utf8' })
-  if (r.status !== 0 || !existsSync(dest)) {
-    throw new Error(`curl 下载失败 (${r.status}): ${r.stderr || ''}`)
+/** 用 curl 下载到内存（自动遵循系统代理配置） */
+function download(url) {
+  const r = spawnSync('curl', ['-sSL', '--fail', url], {
+    // spawnSync 的 maxBuffer 默认只有 1MB，压缩包约 2MB，不放大直接爆掉
+    maxBuffer: 64 * 1024 * 1024
+  })
+  if (r.status !== 0 || !r.stdout || r.stdout.length === 0) {
+    const err = (r.stderr || Buffer.alloc(0)).toString('utf8').trim()
+    throw new Error(`curl 下载失败 (${r.status}): ${err}`)
   }
+  return r.stdout
+}
+
+/**
+ * 解压 .tar.gz —— 纯 Node 实现，不调用系统 tar。
+ *
+ * 踩过的坑：Windows runner 上的 tar 是 bsdtar，不认 GNU tar 的 --force-local
+ * （macOS 自带的同样是 bsdtar，两边行为还不一致）。而这个包里其实只有一个 .node
+ * 文件，与其跟不同实现较劲，不如在内存里解开 —— 顺带消掉了全部平台分支。
+ */
+function extractTarGz(gz, destDir) {
+  const tar = gunzipSync(gz)
+  let count = 0
+  for (let offset = 0; offset + 512 <= tar.length; ) {
+    const header = tar.subarray(offset, offset + 512)
+    if (header.every((b) => b === 0)) break // 全零块 = 归档结束
+
+    const field = (start, len) =>
+      header
+        .subarray(start, start + len)
+        .toString('utf8')
+        .replace(/\0[\s\S]*$/, '')
+        .trim()
+    const name = field(0, 100)
+    const prefix = field(345, 155)
+    const size = parseInt(field(124, 12), 8) || 0
+    const type = String.fromCharCode(header[156])
+    const dataStart = offset + 512
+    // 文件数据按 512 字节对齐，下一个头从这里开始
+    offset = dataStart + Math.ceil(size / 512) * 512
+
+    // pax / gnu 扩展头只描述下一个文件，本身不落地
+    if (!name || type === 'x' || type === 'g' || type === 'L') continue
+    const path = join(destDir, prefix ? `${prefix}/${name}` : name)
+    if (type === '5' || name.endsWith('/')) {
+      mkdirSync(path, { recursive: true })
+      continue
+    }
+    if (type !== '0' && type !== '') continue // 只取普通文件，软链之类忽略
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, tar.subarray(dataStart, dataStart + size))
+    count += 1
+  }
+  return count
 }
 
 async function main() {
@@ -104,21 +154,15 @@ async function main() {
   for (const url of targets) {
     try {
       console.log('[native] 下载:', url)
-      download(url, tmp)
+      const archive = download(url)
       mkdirSync(releaseDir, { recursive: true })
       // 覆盖前先清掉旧产物，避免 Node ABI 那份被留在原地
       rmSync(target, { force: true })
-      // --force-local 是 GNU tar 专有选项（Windows 上避免把 D:\... 当远程主机名），
-      // macOS 自带的 BSD tar 不认它，会直接报 unknown option
-      const tarArgs = ['-xzf', tmp.replace(/\\/g, '/'), '-C', outDir.replace(/\\/g, '/')]
-      if (platform === 'win32') tarArgs.unshift('--force-local')
-      const r = spawnSync('tar', tarArgs, { encoding: 'utf8' })
-      if (r.status !== 0) throw new Error('tar 解压失败: ' + r.stderr)
+      const extracted = extractTarGz(archive, outDir)
       if (!existsSync(target)) {
-        throw new Error('压缩包中缺少 better_sqlite3.node')
+        throw new Error(`压缩包中缺少 better_sqlite3.node（共解出 ${extracted} 个文件）`)
       }
       console.log('[native] 完成:', target)
-      rmSync(dirname(tmp), { recursive: true, force: true })
       return
     } catch (err) {
       lastErr = err
